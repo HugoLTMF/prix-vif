@@ -116,7 +116,9 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
     _connectivityService.init();
     
     // Notifier le type initial
-    widget.onScanTypeChanged(_isBarcodeMode ? 'barcode' : 'ticket');
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      widget.onScanTypeChanged(_isBarcodeMode ? 'barcode' : 'ticket');
+    });
     
     // Démarrer la caméra automatiquement
     _startScanner();

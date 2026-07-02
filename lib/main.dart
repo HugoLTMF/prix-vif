@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:intl/date_symbol_data_local.dart';
 import 'theme.dart';
 import 'models.dart';
 import 'screens/scan_screen.dart';
@@ -15,6 +16,9 @@ void main() async {
 
   // Étape 3a — Initialisation de Hive
   await Hive.initFlutter();
+
+  // Initialisation de la locale fr_FR pour Intl
+  await initializeDateFormatting('fr_FR', null);
 
   runApp(const PrixVifApp());
 }
