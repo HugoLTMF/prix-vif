@@ -53,6 +53,9 @@ dependencies:
   
   # Internationalisation pour les dates
   intl: ^0.18.1
+  
+  # Graphiques pour l'analyse des prix
+  syncfusion_flutter_charts: ^34.1.29
 
 dev_dependencies:
   flutter_test:

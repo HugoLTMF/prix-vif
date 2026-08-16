@@ -8,11 +8,13 @@ import 'package:intl/intl.dart';
 class DashboardScreen extends StatelessWidget {
   final List<ScanSession> sessions;
   final Function(ScanSession) onSessionSelected;
+  final VoidCallback? onProductAnalysisRequested;
 
   const DashboardScreen({
     super.key,
     required this.sessions,
     required this.onSessionSelected,
+    this.onProductAnalysisRequested,
   });
 
   @override
@@ -31,6 +33,14 @@ class DashboardScreen extends StatelessWidget {
       backgroundColor: AppTheme.backgroundDark,
       appBar: AppBar(
         title: const NeonTitle(text: 'TABLEAU DE BORD', fontSize: 20),
+        actions: [
+          if (onProductAnalysisRequested != null)
+            IconButton(
+              icon: const Icon(Icons.analytics, color: AppTheme.textPrimary),
+              tooltip: 'Analyser un produit',
+              onPressed: onProductAnalysisRequested,
+            ),
+        ],
       ),
       body: sessions.isEmpty
           ? _EmptyDashboardState()
@@ -39,6 +49,12 @@ class DashboardScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Bouton d'analyse par produit
+                  if (onProductAnalysisRequested != null)
+                    _ProductAnalysisButton(
+                      onPressed: onProductAnalysisRequested!,
+                    ),
+                  const SizedBox(height: 24),
                   // Statistiques globales
                   _GlobalStatsSection(stats: stats),
                   const SizedBox(height: 24),
@@ -956,6 +972,79 @@ class _RecentSessionCard extends StatelessWidget {
     } else {
       return '${date.day}/${date.month}/${date.year}';
     }
+  }
+}
+
+// ==================== BOUTON ANALYSE PAR PRODUIT ====================
+
+class _ProductAnalysisButton extends StatelessWidget {
+  final VoidCallback onPressed;
+
+  const _ProductAnalysisButton({required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppTheme.primary.withOpacity(0.3),
+              AppTheme.primary.withOpacity(0.1),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppTheme.primary.withOpacity(0.4)),
+      ),
+      padding: const EdgeInsets.all(20),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.search,
+              color: AppTheme.primary,
+              size: 24,
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Analyser un produit',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Voir l\'évolution des prix, comparer les magasins',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(
+            Icons.arrow_forward,
+            color: AppTheme.primary,
+            size: 20,
+          ),
+        ],
+      ),
+    ),
+  );
   }
 }
 

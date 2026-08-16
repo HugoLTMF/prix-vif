@@ -156,6 +156,135 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
     }
   }
 
+  void _showSettingsDialog() {
+    final TextEditingController apiController = TextEditingController(
+      text: MistralService.apiKey ?? '',
+    );
+    bool obscureText = true;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceDark,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.settings, color: AppTheme.primary),
+                  SizedBox(width: 10),
+                  Text(
+                    'Configuration API',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Clé API Mistral AI :',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: apiController,
+                    obscureText: obscureText,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Entrez votre clé API Mistral...',
+                      filled: true,
+                      fillColor: AppTheme.surfaceLight,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureText ? Icons.visibility : Icons.visibility_off,
+                          color: AppTheme.textSecondary,
+                        ),
+                        onPressed: () {
+                          setStateDialog(() {
+                            obscureText = !obscureText;
+                          });
+                        },
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    apiController.text.trim().isEmpty
+                        ? '⚠️ Mode Démo actif (sans clé API). L\'analyse des tickets de caisse utilisera des articles factices.'
+                        : '✅ Clé API configurée. L\'analyse utilisera l\'API Mistral Vision réelle (modèle pixtral-12b-2409).',
+                    style: TextStyle(
+                      color: apiController.text.trim().isEmpty
+                          ? AppTheme.warning
+                          : AppTheme.accent,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text(
+                    'Annuler',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final key = apiController.text.trim();
+                    if (widget.repository != null) {
+                      await widget.repository!.saveMistralApiKey(key);
+                    }
+                    MistralService.apiKey = key.isNotEmpty ? key : null;
+                    if (mounted) {
+                      Navigator.of(dialogContext).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: AppTheme.primary,
+                          content: Text(
+                            key.isNotEmpty
+                                ? 'Clé API Mistral enregistrée avec succès'
+                                : 'Clé API Mistral supprimée (Mode Démo activé)',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: AppTheme.backgroundDark,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Sauvegarder'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   // ==================== ÉTAPE 5C — MODE HORS-LIGNE ====================
 
   /// Stocke un scan pour traitement hors-ligne
@@ -1166,6 +1295,11 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
       appBar: AppBar(
         title: const NeonTitle(text: 'SCANNER', fontSize: 22),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: AppTheme.primary),
+            onPressed: _showSettingsDialog,
+            tooltip: 'Paramètres API',
+          ),
           IconButton(
             icon: Badge(
               label: Text(

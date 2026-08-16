@@ -24,8 +24,8 @@ void main() {
 
       /// Crée un XFile temporaire à partir d'une image en mémoire
       Future<XFile> createTestXFile(img.Image image, String name) async {
-        final bytes = img.encodePng(image);
-        final file = File('$tempDir/$name.png');
+        final bytes = img.encodeJpg(image, quality: 100);
+        final file = File('$tempDir/$name.jpg');
         await file.writeAsBytes(bytes);
         return XFile(file.path);
       }
@@ -174,13 +174,13 @@ void main() {
         final result = ImagePreparationResult(
           success: true,
           base64: 'test',
-          originalSize: 2048,
-          compressedSize: 819,
+          originalSize: 20480,
+          compressedSize: 8192,
           reductionPercent: 60.0,
         );
         final message = getCompressionMessage(result);
-        expect(message.contains('2.00 Ko'), isTrue);
-        expect(message.contains('0.80 Ko'), isTrue);
+        expect(message.contains('20.00 Ko'), isTrue);
+        expect(message.contains('8.00 Ko'), isTrue);
         expect(message.contains('60.0%'), isTrue);
       });
     });

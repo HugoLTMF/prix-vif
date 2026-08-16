@@ -8,7 +8,9 @@ import 'screens/results_screen.dart';
 import 'screens/history_screen.dart';
 import 'screens/session_detail_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/product_selection_screen.dart';
 import 'services/scan_repository.dart';
+import 'services/mistral_service.dart';
 
 // Point d'entree de l'application
 void main() async {
@@ -76,6 +78,14 @@ class _MainScreenState extends State<MainScreen> {
   Future<void> _initRepository() async {
     try {
       await _repository.init();
+      
+      // Charger la clé API Mistral
+      final apiKey = _repository.getMistralApiKey();
+      if (apiKey != null) {
+        MistralService.apiKey = apiKey;
+        print('DEBUG MainScreen: Clé API Mistral chargée');
+      }
+
       final savedSessions = await _repository.getAllScans();
       print('DEBUG MainScreen: savedSessions.length = ${savedSessions.length}');
 
@@ -170,6 +180,16 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  void _openProductSelection() {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProductSelectionScreen(
+          repository: _repository,
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleSessionDeleted(ScanSession session) async {
     // Supprimer de la base Hive
     await _repository.deleteScan(session.id);
@@ -233,6 +253,7 @@ class _MainScreenState extends State<MainScreen> {
         key: const ValueKey('dashboard_screen'),
         sessions: _sessions,
         onSessionSelected: _handleSessionSelected,
+        onProductAnalysisRequested: _openProductSelection,
       ),
       // Page Historique
       HistoryScreen(

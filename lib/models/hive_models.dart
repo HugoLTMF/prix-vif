@@ -14,6 +14,12 @@ class CachedProduct {
   final String? imageUrl;
   final List<String>? categories;
   final DateTime cachedAt;
+  final String? ecoscoreGrade;
+  final int? novaGroup;
+  final String? ingredients;
+  final List<String>? allergens;
+  final Map<String, String>? nutrientLevels;
+  final Map<String, double>? nutriments;
 
   CachedProduct({
     required this.ean,
@@ -23,6 +29,12 @@ class CachedProduct {
     this.imageUrl,
     this.categories,
     required this.cachedAt,
+    this.ecoscoreGrade,
+    this.novaGroup,
+    this.ingredients,
+    this.allergens,
+    this.nutrientLevels,
+    this.nutriments,
   });
 
   Map<String, dynamic> toMap() => {
@@ -33,6 +45,12 @@ class CachedProduct {
     'imageUrl': imageUrl,
     'categories': categories,
     'cachedAt': cachedAt.toIso8601String(),
+    'ecoscoreGrade': ecoscoreGrade,
+    'novaGroup': novaGroup,
+    'ingredients': ingredients,
+    'allergens': allergens,
+    'nutrientLevels': nutrientLevels,
+    'nutriments': nutriments,
   };
 
   factory CachedProduct.fromMap(Map<dynamic, dynamic> map) => CachedProduct(
@@ -43,6 +61,12 @@ class CachedProduct {
     imageUrl: map['imageUrl'] as String?,
     categories: (map['categories'] as List?)?.cast<String>(),
     cachedAt: DateTime.parse(map['cachedAt'] as String),
+    ecoscoreGrade: map['ecoscoreGrade'] as String?,
+    novaGroup: map['novaGroup'] as int?,
+    ingredients: map['ingredients'] as String?,
+    allergens: (map['allergens'] as List?)?.cast<String>(),
+    nutrientLevels: (map['nutrientLevels'] as Map?)?.cast<String, String>(),
+    nutriments: (map['nutriments'] as Map?)?.map((key, value) => MapEntry(key as String, (value as num).toDouble())),
   );
 }
 

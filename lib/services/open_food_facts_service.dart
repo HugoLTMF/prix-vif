@@ -13,6 +13,12 @@ class OFFProduct {
   final String? imageUrl;
   final double? quantity;
   final String? unit;
+  final String? ecoscore;
+  final int? novaGroup;
+  final String? ingredients;
+  final List<String> allergens;
+  final Map<String, String> nutrientLevels;
+  final Map<String, double> nutriments;
 
   OFFProduct({
     required this.barcode,
@@ -23,6 +29,12 @@ class OFFProduct {
     this.imageUrl,
     this.quantity,
     this.unit,
+    this.ecoscore,
+    this.novaGroup,
+    this.ingredients,
+    required this.allergens,
+    required this.nutrientLevels,
+    required this.nutriments,
   });
 
   factory OFFProduct.fromJson(String barcode, Map<String, dynamic> json) {
@@ -81,6 +93,55 @@ class OFFProduct {
       }
     }
 
+    // Eco-Score
+    String? ecoscore = p['ecoscore_grade']?.toString().toLowerCase().trim();
+    if (ecoscore == 'unknown' || ecoscore == 'not-applicable') {
+      ecoscore = null;
+    }
+
+    // Groupe Nova
+    int? novaGroup = int.tryParse(p['nova_group']?.toString() ?? '');
+
+    // Ingrédients
+    String? ingredients = p['ingredients_text_fr'] ?? p['ingredients_text'];
+    if (ingredients != null && ingredients.isEmpty) ingredients = null;
+
+    // Allergènes
+    final List<String> allergens = [];
+    final List<dynamic>? rawAllergens = p['allergens_tags'] ?? p['allergens_hierarchy'];
+    if (rawAllergens != null) {
+      for (var alg in rawAllergens) {
+        String algStr = alg.toString();
+        if (algStr.contains(':')) {
+          algStr = algStr.split(':').last;
+        }
+        algStr = algStr.replaceAll('-', ' ').trim();
+        if (algStr.isNotEmpty) {
+          allergens.add(algStr[0].toUpperCase() + algStr.substring(1));
+        }
+      }
+    }
+
+    // Niveaux de nutriments
+    final Map<String, String> nutrientLevels = {};
+    final rawLevels = p['nutrient_levels'] as Map<dynamic, dynamic>?;
+    if (rawLevels != null) {
+      rawLevels.forEach((key, value) {
+        nutrientLevels[key.toString()] = value.toString();
+      });
+    }
+
+    // Nutriments détaillés pour 100g
+    final Map<String, double> nutriments = {};
+    final rawNutriments = p['nutriments'] as Map<dynamic, dynamic>?;
+    if (rawNutriments != null) {
+      rawNutriments.forEach((key, value) {
+        if (value is num) {
+          nutriments[key.toString()] = value.toDouble();
+        }
+      });
+    }
+
     return OFFProduct(
       barcode: barcode,
       name: name,
@@ -90,6 +151,12 @@ class OFFProduct {
       imageUrl: imageUrl,
       quantity: qty,
       unit: unit,
+      ecoscore: ecoscore,
+      novaGroup: novaGroup,
+      ingredients: ingredients,
+      allergens: allergens,
+      nutrientLevels: nutrientLevels,
+      nutriments: nutriments,
     );
   }
 }
@@ -126,6 +193,12 @@ class OpenFoodFactsService {
           nutriscore: cached.nutriscoreGrade,
           categories: cached.categories ?? [],
           imageUrl: cached.imageUrl,
+          ecoscore: cached.ecoscoreGrade,
+          novaGroup: cached.novaGroup,
+          ingredients: cached.ingredients,
+          allergens: cached.allergens ?? [],
+          nutrientLevels: cached.nutrientLevels ?? {},
+          nutriments: cached.nutriments ?? {},
         );
       }
     }
@@ -157,6 +230,12 @@ class OpenFoodFactsService {
               imageUrl: product.imageUrl,
               categories: product.categories,
               cachedAt: DateTime.now(),
+              ecoscoreGrade: product.ecoscore,
+              novaGroup: product.novaGroup,
+              ingredients: product.ingredients,
+              allergens: product.allergens,
+              nutrientLevels: product.nutrientLevels,
+              nutriments: product.nutriments,
             ));
             print('Cache STORE pour EAN: $cleanBarcode');
           }
@@ -193,6 +272,12 @@ class OpenFoodFactsService {
             nutriscore: cached.nutriscoreGrade,
             categories: cached.categories ?? [],
             imageUrl: cached.imageUrl,
+            ecoscore: cached.ecoscoreGrade,
+            novaGroup: cached.novaGroup,
+            ingredients: cached.ingredients,
+            allergens: cached.allergens ?? [],
+            nutrientLevels: cached.nutrientLevels ?? {},
+            nutriments: cached.nutriments ?? {},
           )
         ];
       }
@@ -232,6 +317,12 @@ class OpenFoodFactsService {
               imageUrl: best.imageUrl,
               categories: best.categories,
               cachedAt: DateTime.now(),
+              ecoscoreGrade: best.ecoscore,
+              novaGroup: best.novaGroup,
+              ingredients: best.ingredients,
+              allergens: best.allergens,
+              nutrientLevels: best.nutrientLevels,
+              nutriments: best.nutriments,
             ));
             print('Cache STORE (nom) pour: $cleanName → ${best.name}');
           }
