@@ -38,11 +38,15 @@ class MistralExtractionResult {
 
 /// Service d'interaction avec l'API Mistral Vision
 class MistralService {
-  // Clé API Mistral (peut être définie par l'utilisateur ou injectée)
-  static String? apiKey;
-  
-  // Modèle vision recommandé pour Pixtral
-  static const String _model = 'pixtral-12b-2409';
+  // Clé API Mistral : fournie à la compilation via --dart-define=MISTRAL_API_KEY=... (hors dépôt git),
+  // ou saisie dans l'UI (stockée localement dans Hive, utilisée en fallback).
+  static String? apiKey = const String.fromEnvironment('MISTRAL_API_KEY').isNotEmpty
+      ? const String.fromEnvironment('MISTRAL_API_KEY')
+      : null;
+
+  // Modèle vision : Mistral Small 4 (mars 2026), vision native via /v1/chat/completions.
+  // pixtral-12b-2409 est retiré par Mistral depuis le 2025-12-31.
+  static const String _model = 'mistral-small-latest';
   static const String _baseUrl = 'https://api.mistral.ai/v1/chat/completions';
 
   /// Analyse l'image du ticket (JPEG compressé en bytes) pour en extraire la liste des articles
@@ -103,14 +107,22 @@ Réponds UNIQUEMENT avec un JSON valide sous la forme suivante, sans bloc de cod
             'type': 'json_object',
           }
         }),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 60));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> body = jsonDecode(response.body);
         final String content = body['choices']?[0]?['message']?['content'] ?? '';
         
         if (content.isNotEmpty) {
-          final Map<String, dynamic> parsedJson = jsonDecode(content);
+          var cleaned = content.trim();
+          // Retirer d'éventuelles fences markdown ```json ... ``` autour du JSON
+          if (cleaned.startsWith('```')) {
+            cleaned = cleaned
+                .replaceFirst(RegExp(r'^```[a-zA-Z]*\s*'), '')
+                .replaceFirst(RegExp(r'\s*```$'), '')
+                .trim();
+          }
+          final Map<String, dynamic> parsedJson = jsonDecode(cleaned);
           final List<dynamic>? articlesJson = parsedJson['articles'];
           
           // Parsing des articles

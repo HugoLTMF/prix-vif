@@ -227,7 +227,7 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                   Text(
                     apiController.text.trim().isEmpty
                         ? '⚠️ Mode Démo actif (sans clé API). L\'analyse des tickets de caisse utilisera des articles factices.'
-                        : '✅ Clé API configurée. L\'analyse utilisera l\'API Mistral Vision réelle (modèle pixtral-12b-2409).',
+                        : '✅ Clé API configurée. L\'analyse utilisera l\'API Mistral Vision réelle (modèle mistral-small-latest).',
                     style: TextStyle(
                       color: apiController.text.trim().isEmpty
                           ? AppTheme.warning

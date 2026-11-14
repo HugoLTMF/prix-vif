@@ -79,11 +79,12 @@ class _MainScreenState extends State<MainScreen> {
     try {
       await _repository.init();
       
-      // Charger la clé API Mistral
+      // Charger la clé API Mistral depuis Hive (fallback) — la clé de build
+      // (--dart-define=MISTRAL_API_KEY=...) a priorité et n'est pas écrasée
       final apiKey = _repository.getMistralApiKey();
-      if (apiKey != null) {
+      if (apiKey != null && apiKey.isNotEmpty && MistralService.apiKey == null) {
         MistralService.apiKey = apiKey;
-        print('DEBUG MainScreen: Clé API Mistral chargée');
+        print('DEBUG MainScreen: Clé API Mistral chargée depuis Hive');
       }
 
       final savedSessions = await _repository.getAllScans();

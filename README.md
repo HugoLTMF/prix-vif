@@ -8,6 +8,12 @@
 
 ## 📋 Historique des versions
 
+### v1.0.1 — 2026-11-14 — Fix modèle Mistral + clé API hors dépôt
+
+- **Corrigé** : `pixtral-12b-2409` est retiré par Mistral depuis le 2025-12-31 (l'appel API échouait même avec une clé valide) → remplacé par `mistral-small-latest` (Mistral Small 4, vision native)
+- **Ajouté** : clé API Mistral configurable à la compilation via `--dart-define=MISTRAL_API_KEY=...` — la clé n'est jamais écrite dans le dépôt git (saisie UI/Hive conservée en fallback)
+- **Modifié** : timeout de l'appel vision 15 s → 60 s ; parsing JSON rendu robuste aux blocs ```json
+
 ### v1.0.0 — 2026-11-14 — Mise en place du versionnage du README
 
 - **Ajouté** : fichier `CLAUDE.md` définissant la règle obligatoire de versionner le README à chaque étape (SemVer + changelog)
@@ -144,6 +150,20 @@ flutter build appbundle --release
 
 > ⚠️ **Note** : Le web n'est pas supporté avec la caméra réelle. Utilisez `flutter run -d chrome` uniquement pour le design, mais pas pour tester la fonctionnalité caméra.
 
+### 4. Configurer la clé API Mistral (hors dépôt)
+
+L'analyse des tickets de caisse utilise l'API Mistral. La clé ne doit **jamais** être écrite dans le code du dépôt : passe-la à la compilation avec `--dart-define` (elle est alors embarquée dans le binaire uniquement) :
+
+```bash
+# Développement
+flutter run --dart-define=MISTRAL_API_KEY=sk-...
+
+# Build release
+flutter build apk --release --dart-define=MISTRAL_API_KEY=sk-...
+```
+
+Sans clé, l'application reste en **mode démo** (articles factices). Alternative : saisir la clé dans l'app (icône engrenage de l'onglet Scanner) — elle est alors stockée localement dans Hive, jamais dans le dépôt.
+
 ---
 
 ## 📁 Structure du Projet
@@ -268,7 +288,7 @@ Toutes les fonctionnalités principales sont désormais opérationnelles :
 ✅ **Base de données (Hive NoSQL)** - Persistance locale complète avec 5 boxes
 ✅ **Synchronisation automatique** - Rechargement des données après chaque modification
 ✅ **Sauvegarde automatique** - Chaque article scanné est immédiatement persisté
-✅ **Extraction Mistral AI** - Analyse des tickets via API vision (pixtral-12b-2409)
+✅ **Extraction Mistral AI** - Analyse des tickets via API vision (`mistral-small-latest`, Mistral Small 4) — clé fournie via `--dart-define=MISTRAL_API_KEY=...` ou dans les réglages de l'app
 ✅ **Mode hors-ligne** - Stockage des scans quand pas de réseau + traitement automatique au retour
 ✅ **Compression d'image** - Réduction à max 1024px, JPEG 80% avec affichage des gains
 ✅ **Tableau de bord** - Statistiques globales, répartition Nutri-Score, tendances temporelles
@@ -331,7 +351,7 @@ Les contributions sont bienvenues ! Ouvrez un Issue ou Pull Request.
 
 *© 2026 - Prix Vif Scanner - Application complète de scan alimentaire*
 
-*Dernière mise à jour : 14 Novembre 2026 (v1.0.0 — voir Historique des versions)*
+*Dernière mise à jour : 14 Novembre 2026 (v1.0.1 — voir Historique des versions)*
 *Documentation technique : Voir AGENT.MD pour les détails d'implémentation*
 *Règles IA : Voir CLAUDE.md (le README est versionné à chaque étape)*
 *Statut : ✅ Dashboard fiable - Synchronisation temps réel fonctionnelle*
