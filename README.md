@@ -8,6 +8,12 @@
 
 ## 📋 Historique des versions
 
+### v1.0.2 — 2026-11-14 — Fix feedback du mode ticket (bouton Analyser bloqué)
+
+- **Corrigé** : en mode ticket, les erreurs (capture, compression, analyse IA) n'étaient affichées nulle part (le bandeau d'erreur n'existait qu'en mode code-barres) → erreur désormais visible en rouge dans la zone ticket
+- **Corrigé** : aucun indicateur pendant l'analyse IA du ticket (appel API jusqu'à 60 s) → loader « Analyse du ticket par l'IA... » en overlay
+- **Modifié** : le bouton OPTIMISER / ANALYSER (IA) affiche un spinner et est désactivé pendant la compression ou l'analyse, avec guards anti double-clic
+
 ### v1.0.1 — 2026-11-14 — Fix modèle Mistral + clé API hors dépôt
 
 - **Corrigé** : `pixtral-12b-2409` est retiré par Mistral depuis le 2025-12-31 (l'appel API échouait même avec une clé valide) → remplacé par `mistral-small-latest` (Mistral Small 4, vision native)
@@ -351,7 +357,7 @@ Les contributions sont bienvenues ! Ouvrez un Issue ou Pull Request.
 
 *© 2026 - Prix Vif Scanner - Application complète de scan alimentaire*
 
-*Dernière mise à jour : 14 Novembre 2026 (v1.0.1 — voir Historique des versions)*
+*Dernière mise à jour : 14 Novembre 2026 (v1.0.2 — voir Historique des versions)*
 *Documentation technique : Voir AGENT.MD pour les détails d'implémentation*
 *Règles IA : Voir CLAUDE.md (le README est versionné à chaque étape)*
 *Statut : ✅ Dashboard fiable - Synchronisation temps réel fonctionnelle*

@@ -484,7 +484,7 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _compressTicketImage() async {
-    if (_ticketImage == null) return;
+    if (_ticketImage == null || _isCompressing) return;
     setState(() {
       _isCompressing = true;
       _errorMessage = null;
@@ -528,7 +528,7 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _processTicketImage() async {
-    if (_compressedImageBytes == null) return;
+    if (_compressedImageBytes == null || _isLoadingProduct) return;
     setState(() {
       _isLoadingProduct = true;
       _errorMessage = null;
@@ -1045,17 +1045,71 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildTicketScanZone() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceDark,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.primary.withOpacity(0.1), width: 1.5),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: _ticketImage == null
-          ? _buildTicketPlaceholder()
-          : _buildTicketPreview(),
+    return Stack(
+      children: [
+        Container(
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceDark,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.primary.withOpacity(0.1), width: 1.5),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: _ticketImage == null
+              ? _buildTicketPlaceholder()
+              : _buildTicketPreview(),
+        ),
+        // Bandeau d'erreur (visible aussi en mode ticket, pas seulement en mode code-barres)
+        if (_errorMessage != null)
+          Positioned(
+            top: 28,
+            left: 28,
+            right: 28,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.95),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        // Loader pendant l'analyse IA du ticket
+        if (_isLoadingProduct)
+          Positioned.fill(
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.75),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 3.5),
+                    SizedBox(height: 16),
+                    Text(
+                      'Analyse du ticket par l\'IA...',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1273,7 +1327,10 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                       child: MagicButton(
                         text: _compressedSize != null ? 'ANALYSER (IA)' : 'OPTIMISER',
                         icon: _compressedSize != null ? Icons.auto_awesome : Icons.bolt,
-                        onPressed: _compressedSize != null ? _processTicketImage : _compressTicketImage,
+                        onPressed: (_isCompressing || _isLoadingProduct)
+                            ? null
+                            : (_compressedSize != null ? _processTicketImage : _compressTicketImage),
+                        isLoading: _isCompressing || _isLoadingProduct,
                         isPrimary: true,
                         height: 48,
                       ),
