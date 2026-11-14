@@ -6,6 +6,16 @@
 
 ---
 
+## 📋 Historique des versions
+
+### v1.0.0 — 2026-11-14 — Mise en place du versionnage du README
+
+- **Ajouté** : fichier `CLAUDE.md` définissant la règle obligatoire de versionner le README à chaque étape (SemVer + changelog)
+- **Ajouté** : cette section `Historique des versions` dans le README (entrée la plus récente en premier)
+- **Modifié** : pied de page `Dernière mise à jour` désormais synchronisé avec la dernière entrée de l'historique
+
+---
+
 ## 📱 Aperçu
 
 **Prix Vif** est une application Flutter moderne (design 2026) conçue pour scanner des codes-barres et des tickets de caisse afin de récupérer et organiser les informations de prix des produits. 
@@ -321,6 +331,7 @@ Les contributions sont bienvenues ! Ouvrez un Issue ou Pull Request.
 
 *© 2026 - Prix Vif Scanner - Application complète de scan alimentaire*
 
-*Dernière mise à jour : 27 Juin 2026*
+*Dernière mise à jour : 14 Novembre 2026 (v1.0.0 — voir Historique des versions)*
 *Documentation technique : Voir AGENT.MD pour les détails d'implémentation*
+*Règles IA : Voir CLAUDE.md (le README est versionné à chaque étape)*
 *Statut : ✅ Dashboard fiable - Synchronisation temps réel fonctionnelle*
