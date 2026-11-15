@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:prix_vif/screens/dashboard_screen.dart';
 import 'package:prix_vif/models.dart';
+import 'package:prix_vif/models/product_analysis_models.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
@@ -99,5 +100,165 @@ void main() {
 
     expect(find.text('Comparaison par type de produit'), findsOneWidget);
     expect(find.text('1 article non catégorisé'), findsOneWidget);
+  });
+
+  test('ProductPriceEvolutionItem.calculate calcule hausses, baisses et stabilités', () {
+    final t0 = DateTime(2026, 11, 1, 10);
+    final t1 = DateTime(2026, 11, 5, 10);
+    final sessions = [
+      ScanSession(
+        id: 's1',
+        date: t0,
+        type: 'barcode',
+        items: [
+          ScannedItem(
+            id: 'p1_0',
+            name: 'Café Moulu',
+            brand: 'Carte Noire',
+            barcode: '300000000001',
+            price: 3.50,
+            scanDate: t0,
+          ),
+          ScannedItem(
+            id: 'p2_0',
+            name: 'Lait Bio',
+            brand: 'Lactel',
+            barcode: '300000000002',
+            price: 1.80,
+            scanDate: t0,
+          ),
+          ScannedItem(
+            id: 'p3_0',
+            name: 'Biscuits',
+            barcode: '300000000003',
+            price: 2.00,
+            scanDate: t0,
+          ),
+        ],
+      ),
+      ScanSession(
+        id: 's2',
+        date: t1,
+        type: 'barcode',
+        items: [
+          // Café en hausse (+0.50€)
+          ScannedItem(
+            id: 'p1_1',
+            name: 'Café Moulu',
+            brand: 'Carte Noire',
+            barcode: '300000000001',
+            price: 4.00,
+            scanDate: t1,
+          ),
+          // Lait en baisse (-0.20€)
+          ScannedItem(
+            id: 'p2_1',
+            name: 'Lait Bio',
+            brand: 'Lactel',
+            barcode: '300000000002',
+            price: 1.60,
+            scanDate: t1,
+          ),
+          // Biscuits stables
+          ScannedItem(
+            id: 'p3_1',
+            name: 'Biscuits',
+            barcode: '300000000003',
+            price: 2.00,
+            scanDate: t1,
+          ),
+        ],
+      ),
+    ];
+
+    final evolutions = ProductPriceEvolutionItem.calculate(sessions);
+    expect(evolutions.length, 3);
+
+    final cafe = evolutions.firstWhere((e) => e.name == 'Café Moulu');
+    expect(cafe.latestPrice, 4.00);
+    expect(cafe.firstPrice, 3.50);
+    expect(cafe.priceDiff, closeTo(0.50, 0.001));
+    expect(cafe.trend, PriceTrend.up);
+    expect(cafe.trend.label, 'Hausse');
+
+    final lait = evolutions.firstWhere((e) => e.name == 'Lait Bio');
+    expect(lait.latestPrice, 1.60);
+    expect(lait.priceDiff, closeTo(-0.20, 0.001));
+    expect(lait.trend, PriceTrend.down);
+    expect(lait.trend.label, 'Baisse');
+
+    final biscuits = evolutions.firstWhere((e) => e.name == 'Biscuits');
+    expect(biscuits.latestPrice, 2.00);
+    expect(biscuits.priceDiff, closeTo(0.0, 0.001));
+    expect(biscuits.trend, PriceTrend.stable);
+    expect(biscuits.trend.label, 'Stable');
+  });
+
+  testWidgets('Dashboard affiche la section Évolution des prix des produits et navigue au clic',
+      (WidgetTester tester) async {
+    final t0 = DateTime(2026, 11, 1);
+    final t1 = DateTime(2026, 11, 8);
+    final sessions = [
+      ScanSession(
+        id: 's_evo_1',
+        date: t0,
+        type: 'barcode',
+        items: [
+          ScannedItem(
+            id: 'c1',
+            name: 'Chocolat Noir',
+            brand: 'Lindt',
+            barcode: '300000999999',
+            price: 2.50,
+            scanDate: t0,
+          ),
+        ],
+      ),
+      ScanSession(
+        id: 's_evo_2',
+        date: t1,
+        type: 'barcode',
+        items: [
+          ScannedItem(
+            id: 'c2',
+            name: 'Chocolat Noir',
+            brand: 'Lindt',
+            barcode: '300000999999',
+            price: 2.90,
+            scanDate: t1,
+          ),
+        ],
+      ),
+    ];
+
+    String? selectedProductId;
+    String? selectedProductName;
+    int? selectedTab;
+
+    await tester.pumpWidget(MaterialApp(
+      home: DashboardScreen(
+        sessions: sessions,
+        onSessionSelected: (_) {},
+        onProductSelected: (id, name, {int initialTabIndex = 0}) {
+          selectedProductId = id;
+          selectedProductName = name;
+          selectedTab = initialTabIndex;
+        },
+      ),
+    ));
+
+    // Vérifier la présence de la section
+    expect(find.text('Évolution des prix des produits'), findsOneWidget);
+    expect(find.text('Chocolat Noir'), findsOneWidget);
+    expect(find.text('2.90 €'), findsOneWidget);
+    expect(find.textContaining('+0.40 €'), findsOneWidget);
+
+    // Cliquer sur la carte produit
+    await tester.tap(find.text('Chocolat Noir'));
+    await tester.pump();
+
+    expect(selectedProductId, '300000999999');
+    expect(selectedProductName, 'Chocolat Noir');
+    expect(selectedTab, 1); // Onglet 1 = Évolution
   });
 }

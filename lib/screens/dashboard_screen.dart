@@ -1,21 +1,28 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../models.dart';
+import '../models/product_analysis_models.dart';
+import '../services/scan_repository.dart';
 import '../utils/product_type_utils.dart';
 import '../widgets/magic_title.dart';
 import 'package:intl/intl.dart';
+import 'product_detail_screen.dart';
 
 /// Écran de tableau de bord avec analyse nutritionnelle et tendances
 class DashboardScreen extends StatelessWidget {
   final List<ScanSession> sessions;
   final Function(ScanSession) onSessionSelected;
   final VoidCallback? onProductAnalysisRequested;
+  final void Function(String productId, String productName, {int initialTabIndex})? onProductSelected;
+  final ScanRepository? repository;
 
   const DashboardScreen({
     super.key,
     required this.sessions,
     required this.onSessionSelected,
     this.onProductAnalysisRequested,
+    this.onProductSelected,
+    this.repository,
   });
 
   @override
@@ -53,11 +60,17 @@ class DashboardScreen extends StatelessWidget {
                   // Statistiques globales
                   _GlobalStatsSection(stats: stats),
                   const SizedBox(height: 24),
-                  
-                  // Répartition Nutri-Score
-                  _NutriScoreDistributionSection(
-                    sessions: sessions,
-                    distribution: stats.nutriScoreDistribution,
+
+                  // Évolution des prix des produits
+                  _ProductPriceEvolutionSection(
+                    evolutions: stats.productEvolutions,
+                    onProductTap: (productId, productName) => _handleProductTap(
+                      context,
+                      productId,
+                      productName,
+                      initialTabIndex: 1,
+                    ),
+                    onViewAllProducts: onProductAnalysisRequested,
                   ),
                   const SizedBox(height: 24),
                   
@@ -65,6 +78,13 @@ class DashboardScreen extends StatelessWidget {
                   _ProductTypeComparisonSection(
                     productTypeStats: stats.productTypeStats,
                     globalAveragePrice: stats.averagePrice,
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Répartition Nutri-Score
+                  _NutriScoreDistributionSection(
+                    sessions: sessions,
+                    distribution: stats.nutriScoreDistribution,
                   ),
                   const SizedBox(height: 24),
                   
@@ -93,6 +113,30 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
+  void _handleProductTap(
+    BuildContext context,
+    String productId,
+    String productName, {
+    int initialTabIndex = 0,
+  }) {
+    if (onProductSelected != null) {
+      onProductSelected!(productId, productName, initialTabIndex: initialTabIndex);
+    } else if (repository != null) {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => ProductDetailScreen(
+            repository: repository!,
+            productId: productId,
+            productName: productName,
+            initialTabIndex: initialTabIndex,
+          ),
+        ),
+      );
+    } else if (onProductAnalysisRequested != null) {
+      onProductAnalysisRequested!();
+    }
+  }
+
   /// Calcule toutes les statistiques pour le tableau de bord
   _DashboardStats _calculateDashboardStats(List<ScanSession> sessions) {
     final allItems = <ScannedItem>[];
@@ -118,6 +162,9 @@ class DashboardScreen extends StatelessWidget {
           .addItem(item.price);
     }
     
+    // Calculer l'évolution des prix par produit
+    final productEvolutions = ProductPriceEvolutionItem.calculate(sessions);
+
     // Calculer les statistiques par semaine
     final weeklyStats = _calculateWeeklyStats(sessions);
     
@@ -141,6 +188,7 @@ class DashboardScreen extends StatelessWidget {
       averagePrice: avgPrice,
       nutriScoreDistribution: nutriscoreCounts,
       productTypeStats: productTypeStats,
+      productEvolutions: productEvolutions,
       weeklyStats: weeklyStats,
       monthlyStats: monthlyStats,
       weeklyTotal: weeklyTotal,
@@ -216,6 +264,7 @@ class _DashboardStats {
   final double averagePrice;
   final Map<String, int> nutriScoreDistribution;
   final Map<String, _ProductTypeStats> productTypeStats;
+  final List<ProductPriceEvolutionItem> productEvolutions;
   final Map<String, _PeriodStats> weeklyStats;
   final Map<String, _PeriodStats> monthlyStats;
   final double weeklyTotal;
@@ -228,6 +277,7 @@ class _DashboardStats {
     required this.averagePrice,
     required this.nutriScoreDistribution,
     required this.productTypeStats,
+    required this.productEvolutions,
     required this.weeklyStats,
     required this.monthlyStats,
     required this.weeklyTotal,
@@ -592,6 +642,427 @@ class _NutriScoreBar extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ==================== ÉVOLUTION DES PRIX DES PRODUITS ====================
+
+/// Observation d'un article dans une session pour reconstituer l'historique
+class _ArticleObservation {
+  final String id;
+  final String name;
+  final String? brand;
+  final String? barcode;
+  final String? imageUrl;
+  final double price;
+  final DateTime date;
+  final String? storeName;
+
+  _ArticleObservation({
+    required this.id,
+    required this.name,
+    this.brand,
+    this.barcode,
+    this.imageUrl,
+    required this.price,
+    required this.date,
+    this.storeName,
+  });
+}
+
+/// Résumé d'évolution de prix d'un produit pour le tableau de bord
+class ProductPriceEvolutionItem {
+  final String productId;
+  final String name;
+  final String? brand;
+  final String? barcode;
+  final String? imageUrl;
+  final double latestPrice;
+  final double firstPrice;
+  final double previousPrice;
+  final DateTime latestDate;
+  final String? latestStore;
+  final int scanCount;
+  final List<double> prices;
+  final List<DateTime> dates;
+
+  ProductPriceEvolutionItem({
+    required this.productId,
+    required this.name,
+    this.brand,
+    this.barcode,
+    this.imageUrl,
+    required this.latestPrice,
+    required this.firstPrice,
+    required this.previousPrice,
+    required this.latestDate,
+    this.latestStore,
+    required this.scanCount,
+    required this.prices,
+    required this.dates,
+  });
+
+  /// Variation en euros par rapport au prix précédent (ou premier prix)
+  double get priceDiff => latestPrice - (prices.length > 1 ? previousPrice : firstPrice);
+
+  /// Variation globale depuis le tout premier scan
+  double get totalDiff => latestPrice - firstPrice;
+
+  /// Pourcentage de variation par rapport au prix précédent (ou premier prix)
+  double get percentDiff {
+    final base = prices.length > 1 ? previousPrice : firstPrice;
+    if (base <= 0) return 0.0;
+    return ((latestPrice - base) / base) * 100;
+  }
+
+  /// Tendance du prix
+  PriceTrend get trend {
+    final diff = priceDiff;
+    if (diff > 0.01) return PriceTrend.up;
+    if (diff < -0.01) return PriceTrend.down;
+    return PriceTrend.stable;
+  }
+
+  bool get hasEvolution => prices.length >= 2;
+
+  /// Calcule la liste des évolutions de produits à partir d'une liste de sessions
+  static List<ProductPriceEvolutionItem> calculate(List<ScanSession> sessions) {
+    final productMap = <String, List<_ArticleObservation>>{};
+
+    for (final session in sessions) {
+      for (final item in session.items) {
+        final key = (item.barcode != null && item.barcode!.trim().isNotEmpty)
+            ? 'bc_${item.barcode!.trim()}'
+            : 'name_${item.name.trim().toLowerCase()}_${(item.brand ?? '').trim().toLowerCase()}';
+
+        productMap.putIfAbsent(key, () => []).add(_ArticleObservation(
+          id: item.id,
+          name: item.name,
+          brand: item.brand,
+          barcode: item.barcode,
+          imageUrl: item.imageUrl,
+          price: item.price,
+          date: item.scanDate,
+          storeName: item.storeName ?? session.storeName,
+        ));
+      }
+    }
+
+    final evolutions = <ProductPriceEvolutionItem>[];
+
+    for (final observations in productMap.values) {
+      if (observations.isEmpty) continue;
+
+      // Trier par date croissante
+      observations.sort((a, b) => a.date.compareTo(b.date));
+
+      final first = observations.first;
+      final latest = observations.last;
+      final previous = observations.length > 1
+          ? observations[observations.length - 2]
+          : first;
+
+      final productId = (latest.barcode != null && latest.barcode!.trim().isNotEmpty)
+          ? latest.barcode!.trim()
+          : (latest.name.trim().isNotEmpty ? latest.name.trim() : latest.id);
+
+      evolutions.add(ProductPriceEvolutionItem(
+        productId: productId,
+        name: latest.name,
+        brand: latest.brand,
+        barcode: latest.barcode,
+        imageUrl: latest.imageUrl,
+        latestPrice: latest.price,
+        firstPrice: first.price,
+        previousPrice: previous.price,
+        latestDate: latest.date,
+        latestStore: latest.storeName,
+        scanCount: observations.length,
+        prices: observations.map((o) => o.price).toList(),
+        dates: observations.map((o) => o.date).toList(),
+      ));
+    }
+
+    // Priorité de tri :
+    // 1. Produits avec vraie variation de prix (|diff| > 0.01)
+    // 2. Produits avec plusieurs scans (historique prêt)
+    // 3. Produits les plus récents
+    evolutions.sort((a, b) {
+      final aHasVar = a.hasEvolution && a.priceDiff.abs() > 0.01;
+      final bHasVar = b.hasEvolution && b.priceDiff.abs() > 0.01;
+      if (aHasVar && !bHasVar) return -1;
+      if (!aHasVar && bHasVar) return 1;
+
+      if (a.hasEvolution && !b.hasEvolution) return -1;
+      if (!a.hasEvolution && b.hasEvolution) return 1;
+
+      return b.latestDate.compareTo(a.latestDate);
+    });
+
+    return evolutions;
+  }
+}
+
+/// Section affichant l'évolution des prix des produits scannés
+class _ProductPriceEvolutionSection extends StatelessWidget {
+  static const int _maxDisplayed = 5;
+
+  final List<ProductPriceEvolutionItem> evolutions;
+  final void Function(String productId, String productName) onProductTap;
+  final VoidCallback? onViewAllProducts;
+
+  const _ProductPriceEvolutionSection({
+    required this.evolutions,
+    required this.onProductTap,
+    this.onViewAllProducts,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    if (evolutions.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final hasVariations = evolutions.any((e) => e.hasEvolution && e.priceDiff.abs() > 0.01);
+    final displayed = evolutions.take(_maxDisplayed).toList();
+    final remainingCount = evolutions.length - displayed.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.trending_up,
+                  color: AppTheme.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Évolution des prix des produits',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            if (onViewAllProducts != null)
+              TextButton(
+                onPressed: onViewAllProducts,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Tous',
+                  style: TextStyle(
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          hasVariations
+              ? 'Variations de prix constatées au fil de vos achats'
+              : 'Suivi de vos articles scannés (cliquez pour voir la courbe)',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: AppTheme.textMuted,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: AppTheme.glassmorphism(),
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ...displayed.map((item) => _ProductPriceEvolutionCard(
+                    item: item,
+                    onTap: () => onProductTap(item.productId, item.name),
+                  )),
+              if (remainingCount > 0 && onViewAllProducts != null)
+                Center(
+                  child: TextButton.icon(
+                    onPressed: onViewAllProducts,
+                    icon: const Icon(Icons.arrow_forward, size: 14, color: AppTheme.primary),
+                    label: Text(
+                      'Voir les $remainingCount autres produits',
+                      style: const TextStyle(
+                        color: AppTheme.primary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Carte synthétique pour un produit dans la section d'évolution
+class _ProductPriceEvolutionCard extends StatelessWidget {
+  final ProductPriceEvolutionItem item;
+  final VoidCallback onTap;
+
+  const _ProductPriceEvolutionCard({
+    required this.item,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isUp = item.trend == PriceTrend.up;
+    final isDown = item.trend == PriceTrend.down;
+
+    final Color badgeColor;
+    final Color badgeBg;
+    if (isUp) {
+      badgeColor = AppTheme.error;
+      badgeBg = AppTheme.error.withValues(alpha: 0.14);
+    } else if (isDown) {
+      badgeColor = AppTheme.primary;
+      badgeBg = AppTheme.primary.withValues(alpha: 0.14);
+    } else {
+      badgeColor = AppTheme.textMuted;
+      badgeBg = AppTheme.surfaceLight;
+    }
+
+    final String changeLabel;
+    if (item.hasEvolution) {
+      if (item.trend == PriceTrend.stable) {
+        changeLabel = 'Stable';
+      } else {
+        final sign = item.priceDiff > 0 ? '+' : '';
+        changeLabel = '$sign${item.priceDiff.toStringAsFixed(2)} € ($sign${item.percentDiff.toStringAsFixed(1)}%)';
+      }
+    } else {
+      changeLabel = '1 scan';
+    }
+
+    final metaList = <String>[];
+    if (item.brand != null && item.brand!.isNotEmpty) {
+      metaList.add(item.brand!);
+    }
+    if (item.latestStore != null && item.latestStore!.isNotEmpty) {
+      metaList.add(item.latestStore!);
+    }
+    metaList.add('${item.scanCount} scan${item.scanCount > 1 ? 's' : ''}');
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceDark,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isUp
+                  ? AppTheme.error.withValues(alpha: 0.28)
+                  : (isDown ? AppTheme.primary.withValues(alpha: 0.28) : AppTheme.surfaceLight),
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: badgeBg,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  item.hasEvolution ? item.trend.icon : Icons.insights_outlined,
+                  color: badgeColor,
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: AppTheme.textPrimary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      metaList.join(' · '),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppTheme.textMuted,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    '${item.latestPrice.toStringAsFixed(2)} €',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: badgeBg,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      changeLabel,
+                      style: TextStyle(
+                        color: badgeColor,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(width: 6),
+              const Icon(
+                Icons.chevron_right,
+                size: 16,
+                color: AppTheme.textMuted,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

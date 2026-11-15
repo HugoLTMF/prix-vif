@@ -8,6 +8,13 @@
 
 ## 📋 Historique des versions
 
+### v1.2.0 — 2026-11-15 — Section Évolution des prix des produits dans le Dashboard (Étape 1/4)
+
+- **Ajouté** : section « Évolution des prix des produits » directement intégrée sur le Dashboard avec calcul automatique des hausses, baisses et stabilités de prix
+- **Ajouté** : cartes interactives avec badge de tendance (+X% / -X% / stable), dernier prix, enseigne et nombre de scans
+- **Ajouté** : navigation directe en 1 clic depuis le Dashboard vers l'onglet « Évolution » de la fiche produit (`ProductDetailScreen` avec `initialTabIndex: 1`)
+- **Ajouté** : modèle d'agrégation `ProductPriceEvolutionItem` et tests unitaires / widgets associés dans `dashboard_screen_test.dart`
+
 ### v1.1.0 — 2026-11-15 — Comparaison et filtrage par type de produit (Open Food Facts)
 
 - **Ajouté** : utilitaire `product_type_utils.dart` extrayant le type de produit le plus précis issu de la hiérarchie `categories` Open Food Facts (`Milks`, `Breads`, etc.)
@@ -81,8 +88,10 @@
 
 ### 📈 Tableau de Bord (Dashboard)
 - **Statistiques globales** : nombre total de scans, articles, montant total, moyenne par article
+- **Évolution des prix des produits** : suivi des variations (hausses, baisses, stabilités) avec accès direct à la courbe détaillée
+- **Comparaison par type de produit** : prix moyen et fourchettes par catégorie Open Food Facts
 - **Répartition Nutri-Score** : graphique à barres horizontales avec pourcentages A/B/C/D/E
-- **Évolution temporelle** : graphiques hebdomadaires et mensuels
+- **Évolution temporelle** : graphiques hebdomadaires et mensuels des dépenses
 - **Totaux par période** : cumul semaine et mois en cours
 - **Derniers scans** : aperçu rapide avec navigation vers le détail
 
@@ -371,7 +380,7 @@ Les contributions sont bienvenues ! Ouvrez un Issue ou Pull Request.
 
 *© 2026 - Prix Vif Scanner - Application complète de scan alimentaire*
 
-*Dernière mise à jour : 15 Novembre 2026 (v1.1.0 — voir Historique des versions)*
+*Dernière mise à jour : 15 Novembre 2026 (v1.2.0 — voir Historique des versions)*
 *Documentation technique : Voir AGENT.MD pour les détails d'implémentation*
 *Règles IA : Voir CLAUDE.md (le README est versionné à chaque étape)*
 *Statut : ✅ Dashboard fiable - Synchronisation temps réel fonctionnelle*

@@ -9,6 +9,7 @@ import 'screens/history_screen.dart';
 import 'screens/session_detail_screen.dart';
 import 'screens/dashboard_screen.dart';
 import 'screens/product_selection_screen.dart';
+import 'screens/product_detail_screen.dart';
 import 'services/scan_repository.dart';
 import 'services/mistral_service.dart';
 
@@ -191,6 +192,19 @@ class _MainScreenState extends State<MainScreen> {
     );
   }
 
+  void _openProductDetail(String productId, String productName, {int initialTabIndex = 0}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => ProductDetailScreen(
+          repository: _repository,
+          productId: productId,
+          productName: productName,
+          initialTabIndex: initialTabIndex,
+        ),
+      ),
+    );
+  }
+
   Future<void> _handleSessionDeleted(ScanSession session) async {
     // Supprimer de la base Hive
     await _repository.deleteScan(session.id);
@@ -253,8 +267,10 @@ class _MainScreenState extends State<MainScreen> {
       DashboardScreen(
         key: const ValueKey('dashboard_screen'),
         sessions: _sessions,
+        repository: _repository,
         onSessionSelected: _handleSessionSelected,
         onProductAnalysisRequested: _openProductSelection,
+        onProductSelected: _openProductDetail,
       ),
       // Page Historique
       HistoryScreen(
