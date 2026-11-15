@@ -86,6 +86,19 @@ class DashboardScreen extends StatelessWidget {
                     onViewAllProducts: onProductAnalysisRequested,
                   ),
                   const SizedBox(height: 24),
+
+                  // Alternatives moins chères (Recommandations d'économies)
+                  _ProductRecommendationSection(
+                    recommendations: stats.recommendations,
+                    onProductTap: (productId, productName) => _handleProductTap(
+                      context,
+                      productId,
+                      productName,
+                      initialTabIndex: 3,
+                    ),
+                    onViewAllProducts: onProductAnalysisRequested,
+                  ),
+                  const SizedBox(height: 24),
                   
                   // Comparaison par type de produit (Open Food Facts)
                   _ProductTypeComparisonSection(
@@ -181,6 +194,9 @@ class DashboardScreen extends StatelessWidget {
     // Calculer les comparaisons de prix par magasin pour les mêmes produits
     final storeComparisons = ProductStoreComparisonItem.calculate(sessions);
 
+    // Calculer les recommandations d'alternatives moins chères
+    final recommendations = ProductRecommendationItem.calculate(sessions);
+
     // Calculer les statistiques par semaine
     final weeklyStats = _calculateWeeklyStats(sessions);
     
@@ -206,6 +222,7 @@ class DashboardScreen extends StatelessWidget {
       productTypeStats: productTypeStats,
       productEvolutions: productEvolutions,
       storeComparisons: storeComparisons,
+      recommendations: recommendations,
       weeklyStats: weeklyStats,
       monthlyStats: monthlyStats,
       weeklyTotal: weeklyTotal,
@@ -283,6 +300,7 @@ class _DashboardStats {
   final Map<String, _ProductTypeStats> productTypeStats;
   final List<ProductPriceEvolutionItem> productEvolutions;
   final List<ProductStoreComparisonItem> storeComparisons;
+  final List<ProductRecommendationItem> recommendations;
   final Map<String, _PeriodStats> weeklyStats;
   final Map<String, _PeriodStats> monthlyStats;
   final double weeklyTotal;
@@ -297,6 +315,7 @@ class _DashboardStats {
     required this.productTypeStats,
     required this.productEvolutions,
     required this.storeComparisons,
+    required this.recommendations,
     required this.weeklyStats,
     required this.monthlyStats,
     required this.weeklyTotal,
@@ -1547,6 +1566,660 @@ class _ProductStoreComparisonCard extends StatelessWidget {
                         ),
                       ),
                     ],
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: AppTheme.textMuted,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== ALTERNATIVES MOINS CHÈRES ====================
+
+/// Profil résumé d'un produit pour la détection d'alternatives équivalentes
+class _ProductProfile {
+  final String key;
+  final String id;
+  final String name;
+  final String? brand;
+  final String? barcode;
+  final String? imageUrl;
+  List<String>? categories;
+  double latestPrice;
+  DateTime latestDate;
+  String? latestStore;
+  final Map<String, _StorePriceObservation> storeObservations;
+
+  _ProductProfile({
+    required this.key,
+    required this.id,
+    required this.name,
+    this.brand,
+    this.barcode,
+    this.imageUrl,
+    this.categories,
+    required this.latestPrice,
+    required this.latestDate,
+    this.latestStore,
+    required this.storeObservations,
+  });
+}
+
+/// Recommandation d'un produit équivalent moins cher pour le tableau de bord
+class ProductRecommendationItem {
+  final String referenceProductId;
+  final String referenceProductName;
+  final String? referenceBrand;
+  final String? referenceBarcode;
+  final String? referenceImageUrl;
+  final String? referenceStore;
+  final double referencePrice;
+
+  final String alternativeProductId;
+  final String alternativeProductName;
+  final String? alternativeBrand;
+  final String? alternativeBarcode;
+  final String? alternativeImageUrl;
+  final String? alternativeStore;
+  final double alternativePrice;
+
+  final String category;
+
+  ProductRecommendationItem({
+    required this.referenceProductId,
+    required this.referenceProductName,
+    this.referenceBrand,
+    this.referenceBarcode,
+    this.referenceImageUrl,
+    this.referenceStore,
+    required this.referencePrice,
+    required this.alternativeProductId,
+    required this.alternativeProductName,
+    this.alternativeBrand,
+    this.alternativeBarcode,
+    this.alternativeImageUrl,
+    this.alternativeStore,
+    required this.alternativePrice,
+    required this.category,
+  });
+
+  /// Montant économisé en euros
+  double get savingAmount => referencePrice - alternativePrice;
+
+  /// Pourcentage d'économie
+  double get savingPercent {
+    if (referencePrice <= 0) return 0.0;
+    return (savingAmount / referencePrice) * 100;
+  }
+
+  /// Indique s'il y a un gain financier notable (> 1 centime)
+  bool get hasSaving => savingAmount > 0.01;
+
+  static const _stopWords = {
+    'le', 'la', 'les', 'de', 'du', 'des', 'au', 'aux', 'd', 'l', 'un', 'une', 'uht', 'bio',
+    'en', 'et', 'a', 'sur', 'pour', 'pur', 'pure', '100%'
+  };
+
+  static String? _firstSignificantWord(String name) {
+    final cleaned = name
+        .toLowerCase()
+        .replaceAll(RegExp(r"[^\w\sàâäéèêëîïôöùûüç]"), ' ');
+    final parts = cleaned.split(RegExp(r'\s+'));
+    for (final part in parts) {
+      final p = part.trim();
+      if (p.length >= 3 && !_stopWords.contains(p)) {
+        return p;
+      }
+    }
+    return null;
+  }
+
+  static String _capitalize(String text) {
+    if (text.isEmpty) return text;
+    return text[0].toUpperCase() + text.substring(1);
+  }
+
+  static String? _checkEquivalence(_ProductProfile a, _ProductProfile b) {
+    // 1. Si les deux produits disposent de catégories OFF
+    if (isCategorized(a.categories) && isCategorized(b.categories)) {
+      final typeA = productTypeOf(a.categories);
+      final typeB = productTypeOf(b.categories);
+      if (typeA != null && typeA == typeB) {
+        return typeA;
+      }
+      // Intersection sur les catégories
+      if (a.categories != null && b.categories != null) {
+        for (final cat in a.categories!) {
+          final trimmed = cat.trim();
+          if (trimmed.isNotEmpty &&
+              b.categories!.any((c) => c.trim().toLowerCase() == trimmed.toLowerCase())) {
+            return productTypeLabel(a.categories);
+          }
+        }
+      }
+    } else if (isCategorized(a.categories) || isCategorized(b.categories)) {
+      final type = productTypeOf(a.categories) ?? productTypeOf(b.categories);
+      final wordA = _firstSignificantWord(a.name);
+      final wordB = _firstSignificantWord(b.name);
+      if (wordA != null && wordA == wordB) {
+        return type ?? _capitalize(wordA);
+      }
+    }
+
+    // 2. Fallback par mot-clé principal de nom
+    final wordA = _firstSignificantWord(a.name);
+    final wordB = _firstSignificantWord(b.name);
+    if (wordA != null && wordA.length >= 3 && wordA == wordB) {
+      return _capitalize(wordA);
+    }
+
+    return null;
+  }
+
+  /// Calcule les recommandations de produits équivalents moins chers depuis les sessions
+  static List<ProductRecommendationItem> calculate(List<ScanSession> sessions) {
+    final productMap = <String, _ProductProfile>{};
+
+    for (final session in sessions) {
+      for (final item in session.items) {
+        final rawStore = (item.storeName ?? session.storeName ?? '').trim();
+        final storeName = rawStore.isNotEmpty ? rawStore : null;
+
+        final key = (item.barcode != null && item.barcode!.trim().isNotEmpty)
+            ? 'bc_${item.barcode!.trim()}'
+            : 'name_${item.name.trim().toLowerCase()}_${(item.brand ?? '').trim().toLowerCase()}';
+
+        final existing = productMap[key];
+        if (existing == null) {
+          productMap[key] = _ProductProfile(
+            key: key,
+            id: item.id,
+            name: item.name,
+            brand: item.brand,
+            barcode: item.barcode,
+            imageUrl: item.imageUrl,
+            categories: item.categories,
+            latestPrice: item.price,
+            latestDate: item.scanDate,
+            latestStore: storeName,
+            storeObservations: storeName != null
+                ? {
+                    storeName: _StorePriceObservation(
+                      price: item.price,
+                      date: item.scanDate,
+                    )
+                  }
+                : {},
+          );
+        } else {
+          final isMoreRecent = item.scanDate.isAfter(existing.latestDate);
+          if (isMoreRecent) {
+            existing.latestPrice = item.price;
+            existing.latestDate = item.scanDate;
+            if (storeName != null) existing.latestStore = storeName;
+          }
+          if (existing.categories == null && item.categories != null) {
+            existing.categories = item.categories;
+          }
+          if (storeName != null) {
+            final storeObs = existing.storeObservations[storeName];
+            if (storeObs == null || item.scanDate.isAfter(storeObs.date)) {
+              existing.storeObservations[storeName] = _StorePriceObservation(
+                price: item.price,
+                date: item.scanDate,
+              );
+            }
+          }
+        }
+      }
+    }
+
+    final products = productMap.values.toList();
+    if (products.length < 2) return [];
+
+    final recommendations = <ProductRecommendationItem>[];
+
+    // Pour chaque produit A (produit acheté/scanné), chercher la meilleure alternative B moins chère dans un autre magasin
+    for (final prodA in products) {
+      if (prodA.storeObservations.isEmpty) continue;
+      ProductRecommendationItem? bestForA;
+
+      for (final prodB in products) {
+        if (prodA.key == prodB.key) continue;
+        if (prodA.barcode != null &&
+            prodB.barcode != null &&
+            prodA.barcode == prodB.barcode) {
+          continue;
+        }
+        if (prodB.storeObservations.isEmpty) continue;
+
+        final categoryMatch = _checkEquivalence(prodA, prodB);
+        if (categoryMatch == null) continue;
+
+        for (final storeAEntry in prodA.storeObservations.entries) {
+          final storeA = storeAEntry.key;
+          final priceA = storeAEntry.value.price;
+
+          for (final storeBEntry in prodB.storeObservations.entries) {
+            final storeB = storeBEntry.key;
+            final priceB = storeBEntry.value.price;
+
+            // Doit obligatoirement être dans un magasin différent
+            if (storeA == storeB) continue;
+
+            final diff = priceA - priceB;
+            if (diff > 0.01) {
+              if (bestForA == null || diff > bestForA.savingAmount) {
+                bestForA = ProductRecommendationItem(
+                  referenceProductId: prodA.barcode ?? prodA.id,
+                  referenceProductName: prodA.name,
+                  referenceBrand: prodA.brand,
+                  referenceBarcode: prodA.barcode,
+                  referenceImageUrl: prodA.imageUrl,
+                  referenceStore: storeA,
+                  referencePrice: priceA,
+                  alternativeProductId: prodB.barcode ?? prodB.id,
+                  alternativeProductName: prodB.name,
+                  alternativeBrand: prodB.brand,
+                  alternativeBarcode: prodB.barcode,
+                  alternativeImageUrl: prodB.imageUrl,
+                  alternativeStore: storeB,
+                  alternativePrice: priceB,
+                  category: categoryMatch,
+                );
+              }
+            }
+          }
+        }
+      }
+
+      if (bestForA != null) {
+        recommendations.add(bestForA);
+      }
+    }
+
+    // Trier par montant d'économie décroissant
+    recommendations.sort((a, b) => b.savingAmount.compareTo(a.savingAmount));
+
+    return recommendations;
+  }
+}
+
+/// Section des recommandations de produits alternatifs moins chers
+class _ProductRecommendationSection extends StatelessWidget {
+  static const int _maxDisplayed = 3;
+
+  final List<ProductRecommendationItem> recommendations;
+  final void Function(String productId, String productName) onProductTap;
+  final VoidCallback? onViewAllProducts;
+
+  const _ProductRecommendationSection({
+    required this.recommendations,
+    required this.onProductTap,
+    this.onViewAllProducts,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final displayed = recommendations.take(_maxDisplayed).toList();
+    final remainingCount = recommendations.length - displayed.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.lightbulb_outline,
+                  color: AppTheme.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Alternatives moins chères',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            if (onViewAllProducts != null)
+              TextButton(
+                onPressed: onViewAllProducts,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Tous',
+                  style: TextStyle(
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          recommendations.isNotEmpty
+              ? 'Produits équivalents repérés à moindre coût dans d\'autres enseignes'
+              : 'Trouvez des alternatives plus économiques dans d\'autres magasins',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: AppTheme.textMuted,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: AppTheme.glassmorphism(),
+          padding: const EdgeInsets.all(14),
+          child: recommendations.isEmpty
+              ? _buildEmptyState(context)
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ...displayed.map((item) => _ProductRecommendationCard(
+                          item: item,
+                          onTap: () => onProductTap(
+                            item.referenceProductId,
+                            item.referenceProductName,
+                          ),
+                        )),
+                    if (remainingCount > 0 && onViewAllProducts != null)
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: onViewAllProducts,
+                          icon: const Icon(Icons.arrow_forward,
+                              size: 14, color: AppTheme.primary),
+                          label: Text(
+                            'Voir les $remainingCount autres recommandations',
+                            style: const TextStyle(
+                              color: AppTheme.primary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.lightbulb_outline,
+            size: 36,
+            color: AppTheme.textMuted.withValues(alpha: 0.6),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Aucune alternative moins chère trouvée',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: AppTheme.textPrimary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Scannez des produits équivalents dans différentes enseignes pour identifier des économies potentielles.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppTheme.textMuted,
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Carte de recommandation d'une alternative moins chère
+class _ProductRecommendationCard extends StatelessWidget {
+  final ProductRecommendationItem item;
+  final VoidCallback onTap;
+
+  const _ProductRecommendationCard({
+    required this.item,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceDark,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppTheme.primary.withValues(alpha: 0.35),
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Ligne 1 : Catégorie + Badge Économie
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.backgroundDark.withValues(alpha: 0.7),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.category_outlined,
+                          size: 11,
+                          color: AppTheme.textSecondary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          item.category,
+                          style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: AppTheme.primary.withValues(alpha: 0.4),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.savings_outlined,
+                          size: 12,
+                          color: AppTheme.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '-${item.savingAmount.toStringAsFixed(2)} € (-${item.savingPercent.toStringAsFixed(0)}%)',
+                          style: const TextStyle(
+                            color: AppTheme.primary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Bloc Produit Alternatif (Recommandé)
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppTheme.primary.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: AppTheme.primary.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.check,
+                        size: 16,
+                        color: AppTheme.primary,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                'Prenez ',
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  item.alternativeProductName,
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    color: AppTheme.textPrimary,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (item.alternativeBrand != null &&
+                              item.alternativeBrand!.isNotEmpty)
+                            Text(
+                              item.alternativeBrand!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: AppTheme.textMuted,
+                                fontSize: 11,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              if (item.alternativeStore != null) ...[
+                                const Icon(
+                                  Icons.store,
+                                  size: 12,
+                                  color: AppTheme.primary,
+                                ),
+                                const SizedBox(width: 3),
+                                Text(
+                                  item.alternativeStore!,
+                                  style: const TextStyle(
+                                    color: AppTheme.primary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                              Text(
+                                '${item.alternativePrice.toStringAsFixed(2)} €',
+                                style: const TextStyle(
+                                  color: AppTheme.primary,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 6),
+
+              // Bloc Produit de Référence (Au lieu de...)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.arrow_forward,
+                      size: 12,
+                      color: AppTheme.textMuted,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Au lieu de ${item.referenceProductName}${item.referenceBrand != null && item.referenceBrand!.isNotEmpty ? " (${item.referenceBrand})" : ""}${item.referenceStore != null ? " chez ${item.referenceStore}" : ""} (${item.referencePrice.toStringAsFixed(2)} €)',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppTheme.textMuted,
+                          fontSize: 11,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     const Icon(
                       Icons.chevron_right,
                       size: 16,

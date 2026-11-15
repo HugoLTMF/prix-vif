@@ -8,6 +8,13 @@
 
 ## 📋 Historique des versions
 
+### v1.4.0 — 2026-11-15 — Recommandations d'alternatives moins chères dans le Dashboard (Étape 3/4)
+
+- **Ajouté** : section « Alternatives moins chères » directement intégrée sur le Dashboard identifiant proactivement les produits équivalents (même type ou catégorie OFF, ou famille de produit) moins chers repérés dans d'autres enseignes
+- **Ajouté** : calcul automatique des gains en euros et en pourcentage d'économie (« Prenez [Produit B] chez [Magasin B] au lieu de [Produit A] chez [Magasin A] : économisez X € »)
+- **Ajouté** : navigation directe en 1 clic vers l'onglet « Similaires » de la fiche produit (`ProductDetailScreen` avec `initialTabIndex: 3`)
+- **Ajouté** : modèle d'agrégation `ProductRecommendationItem` avec détection d'équivalence intelligente (catégories OFF et mot-clé de produit) et suite de tests unitaires / widgets dans `dashboard_screen_test.dart`
+
 ### v1.3.0 — 2026-11-15 — Comparateur multi-magasins dans le Dashboard (Étape 2/4)
 
 - **Ajouté** : section « Comparateur multi-magasins » directement intégrée sur le Dashboard identifiant pour chaque produit scanné dans plusieurs enseignes le magasin le moins cher vs le plus cher
@@ -97,6 +104,7 @@
 - **Statistiques globales** : nombre total de scans, articles, montant total, moyenne par article
 - **Évolution des prix des produits** : suivi des variations (hausses, baisses, stabilités) avec accès direct à la courbe détaillée
 - **Comparateur multi-magasins** : identification des écarts de prix inter-enseignes et calcul des économies potentielles par produit
+- **Alternatives moins chères** : suggestions proactives de produits équivalents plus économiques repérés dans d'autres enseignes avec calcul des gains
 - **Comparaison par type de produit** : prix moyen et fourchettes par catégorie Open Food Facts
 - **Répartition Nutri-Score** : graphique à barres horizontales avec pourcentages A/B/C/D/E
 - **Évolution temporelle** : graphiques hebdomadaires et mensuels des dépenses
@@ -388,7 +396,7 @@ Les contributions sont bienvenues ! Ouvrez un Issue ou Pull Request.
 
 *© 2026 - Prix Vif Scanner - Application complète de scan alimentaire*
 
-*Dernière mise à jour : 15 Novembre 2026 (v1.3.0 — voir Historique des versions)*
+*Dernière mise à jour : 15 Novembre 2026 (v1.4.0 — voir Historique des versions)*
 *Documentation technique : Voir AGENT.MD pour les détails d'implémentation*
 *Règles IA : Voir CLAUDE.md (le README est versionné à chaque étape)*
 *Statut : ✅ Dashboard fiable - Synchronisation temps réel fonctionnelle*

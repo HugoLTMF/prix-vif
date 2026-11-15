@@ -387,4 +387,183 @@ void main() {
     expect(tappedName, 'Jus d\'Orange');
     expect(tappedTab, 2); // Onglet 2 = Magasins
   });
+
+  test('ProductRecommendationItem.calculate suggère une alternative moins chère dans un autre magasin', () {
+    final t0 = DateTime(2026, 11, 3);
+    final sessions = [
+      ScanSession(
+        id: 'sess_ref',
+        date: t0,
+        type: 'barcode',
+        storeName: 'Carrefour',
+        items: [
+          ScannedItem(
+            id: 'ref_lait',
+            name: 'Lait Candia Demi-Écrémé',
+            brand: 'Candia',
+            barcode: '300000111111',
+            price: 1.49,
+            scanDate: t0,
+            storeName: 'Carrefour',
+            categories: ['Foods', 'Beverages', 'Milks'],
+          ),
+        ],
+      ),
+      ScanSession(
+        id: 'sess_alt',
+        date: t0,
+        type: 'barcode',
+        storeName: 'Leclerc',
+        items: [
+          ScannedItem(
+            id: 'alt_lait',
+            name: 'Lait Marque Repère Demi-Écrémé',
+            brand: 'Marque Repère',
+            barcode: '300000222222',
+            price: 1.09,
+            scanDate: t0,
+            storeName: 'Leclerc',
+            categories: ['Foods', 'Beverages', 'Milks'],
+          ),
+        ],
+      ),
+    ];
+
+    final recommendations = ProductRecommendationItem.calculate(sessions);
+    expect(recommendations.length, 1);
+
+    final rec = recommendations.first;
+    expect(rec.referenceProductName, 'Lait Candia Demi-Écrémé');
+    expect(rec.referenceStore, 'Carrefour');
+    expect(rec.referencePrice, 1.49);
+    expect(rec.alternativeProductName, 'Lait Marque Repère Demi-Écrémé');
+    expect(rec.alternativeStore, 'Leclerc');
+    expect(rec.alternativePrice, 1.09);
+    expect(rec.category, 'Milks');
+    expect(rec.savingAmount, closeTo(0.40, 0.001));
+    expect(rec.savingPercent, closeTo(26.84, 0.1));
+    expect(rec.hasSaving, isTrue);
+  });
+
+  test('ProductRecommendationItem.calculate détecte les équivalences par mot-clé sans catégories', () {
+    final t0 = DateTime(2026, 11, 3);
+    final sessions = [
+      ScanSession(
+        id: 'sess_carrefour_pain',
+        date: t0,
+        type: 'barcode',
+        storeName: 'Carrefour',
+        items: [
+          ScannedItem(
+            id: 'pain_cher',
+            name: 'Pain de Mie Brioché',
+            brand: 'Brioche Dorée',
+            barcode: '300000333333',
+            price: 2.99,
+            scanDate: t0,
+            storeName: 'Carrefour',
+          ),
+        ],
+      ),
+      ScanSession(
+        id: 'sess_aldi_pain',
+        date: t0,
+        type: 'barcode',
+        storeName: 'Aldi',
+        items: [
+          ScannedItem(
+            id: 'pain_eco',
+            name: 'Pain de Mie Nature',
+            brand: 'Aldi',
+            barcode: '300000444444',
+            price: 1.69,
+            scanDate: t0,
+            storeName: 'Aldi',
+          ),
+        ],
+      ),
+    ];
+
+    final recommendations = ProductRecommendationItem.calculate(sessions);
+    expect(recommendations.length, 1);
+    final rec = recommendations.first;
+    expect(rec.referenceProductName, 'Pain de Mie Brioché');
+    expect(rec.alternativeProductName, 'Pain de Mie Nature');
+    expect(rec.category, 'Pain');
+    expect(rec.savingAmount, closeTo(1.30, 0.001));
+  });
+
+  testWidgets('Dashboard affiche les Alternatives moins chères et navigue vers l\'onglet Similaires',
+      (WidgetTester tester) async {
+    final t0 = DateTime(2026, 11, 4);
+    final sessions = [
+      ScanSession(
+        id: 'sess_sim_1',
+        date: t0,
+        type: 'barcode',
+        items: [
+          ScannedItem(
+            id: 'c1',
+            name: 'Café Moulu Premium',
+            brand: 'Carte Noire',
+            barcode: '300000555555',
+            price: 3.80,
+            scanDate: t0,
+            storeName: 'Monoprix',
+            categories: ['Foods', 'Beverages', 'Coffees'],
+          ),
+        ],
+      ),
+      ScanSession(
+        id: 'sess_sim_2',
+        date: t0,
+        type: 'barcode',
+        items: [
+          ScannedItem(
+            id: 'c2',
+            name: 'Café Moulu Classique',
+            brand: 'Grand Mère',
+            barcode: '300000666666',
+            price: 2.60,
+            scanDate: t0,
+            storeName: 'Leclerc',
+            categories: ['Foods', 'Beverages', 'Coffees'],
+          ),
+        ],
+      ),
+    ];
+
+    String? tappedId;
+    String? tappedName;
+    int? tappedTab;
+
+    await tester.pumpWidget(MaterialApp(
+      home: DashboardScreen(
+        sessions: sessions,
+        onSessionSelected: (_) {},
+        onProductSelected: (id, name, {int initialTabIndex = 0}) {
+          tappedId = id;
+          tappedName = name;
+          tappedTab = initialTabIndex;
+        },
+      ),
+    ));
+
+    expect(find.text('Alternatives moins chères'), findsOneWidget);
+    expect(find.text('Prenez '), findsOneWidget);
+    expect(find.text('Café Moulu Classique'), findsWidgets);
+    expect(find.text('2.60 €'), findsWidgets);
+    expect(find.textContaining('Au lieu de Café Moulu Premium'), findsOneWidget);
+    expect(find.textContaining('-1.20 €'), findsOneWidget);
+
+    // Tap sur la carte de recommandation
+    final target = find.text('Prenez ').first;
+    await tester.ensureVisible(target);
+    await tester.tap(target);
+    await tester.pump();
+
+    expect(tappedId, '300000555555');
+    expect(tappedName, 'Café Moulu Premium');
+    expect(tappedTab, 3); // Onglet 3 = Similaires
+  });
 }
