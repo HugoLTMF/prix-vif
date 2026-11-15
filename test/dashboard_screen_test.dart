@@ -261,4 +261,130 @@ void main() {
     expect(selectedProductName, 'Chocolat Noir');
     expect(selectedTab, 1); // Onglet 1 = Évolution
   });
+
+  test('ProductStoreComparisonItem.calculate identifie magasin le moins cher et écart', () {
+    final t0 = DateTime(2026, 11, 2);
+    final sessions = [
+      ScanSession(
+        id: 'sess_leclerc',
+        date: t0,
+        type: 'barcode',
+        storeName: 'Leclerc',
+        items: [
+          ScannedItem(
+            id: 'm1',
+            name: 'Pâte à Tartiner',
+            brand: 'Nocciolata',
+            barcode: '8001234567890',
+            price: 3.20,
+            scanDate: t0,
+            storeName: 'Leclerc',
+          ),
+        ],
+      ),
+      ScanSession(
+        id: 'sess_monoprix',
+        date: t0,
+        type: 'barcode',
+        storeName: 'Monoprix',
+        items: [
+          ScannedItem(
+            id: 'm2',
+            name: 'Pâte à Tartiner',
+            brand: 'Nocciolata',
+            barcode: '8001234567890',
+            price: 4.10,
+            scanDate: t0,
+            storeName: 'Monoprix',
+          ),
+        ],
+      ),
+    ];
+
+    final comparisons = ProductStoreComparisonItem.calculate(sessions);
+    expect(comparisons.length, 1);
+
+    final item = comparisons.first;
+    expect(item.name, 'Pâte à Tartiner');
+    expect(item.cheapestStore, 'Leclerc');
+    expect(item.cheapestPrice, 3.20);
+    expect(item.mostExpensiveStore, 'Monoprix');
+    expect(item.mostExpensivePrice, 4.10);
+    expect(item.priceDiff, closeTo(0.90, 0.001));
+    expect(item.savingPercent, closeTo(21.95, 0.1));
+    expect(item.hasPriceDifference, isTrue);
+  });
+
+  testWidgets('Dashboard affiche le Comparateur multi-magasins et navigue vers l\'onglet Magasins',
+      (WidgetTester tester) async {
+    final t0 = DateTime(2026, 11, 2);
+    final sessions = [
+      ScanSession(
+        id: 's_comp_1',
+        date: t0,
+        type: 'barcode',
+        items: [
+          ScannedItem(
+            id: 'n1',
+            name: 'Jus d\'Orange',
+            brand: 'Tropicana',
+            barcode: '300000777777',
+            price: 2.10,
+            scanDate: t0,
+            storeName: 'Lidl',
+          ),
+        ],
+      ),
+      ScanSession(
+        id: 's_comp_2',
+        date: t0,
+        type: 'barcode',
+        items: [
+          ScannedItem(
+            id: 'n2',
+            name: 'Jus d\'Orange',
+            brand: 'Tropicana',
+            barcode: '300000777777',
+            price: 2.70,
+            scanDate: t0,
+            storeName: 'Carrefour',
+          ),
+        ],
+      ),
+    ];
+
+    String? tappedId;
+    String? tappedName;
+    int? tappedTab;
+
+    await tester.pumpWidget(MaterialApp(
+      home: DashboardScreen(
+        sessions: sessions,
+        onSessionSelected: (_) {},
+        onProductSelected: (id, name, {int initialTabIndex = 0}) {
+          tappedId = id;
+          tappedName = name;
+          tappedTab = initialTabIndex;
+        },
+      ),
+    ));
+
+    expect(find.text('Comparateur multi-magasins'), findsOneWidget);
+    expect(find.text('Jus d\'Orange'), findsWidgets);
+    expect(find.text('Lidl'), findsWidgets);
+    expect(find.text('2.10 €'), findsWidgets);
+    expect(find.text('Carrefour'), findsWidgets);
+    expect(find.text('2.70 €'), findsWidgets);
+    expect(find.textContaining('-0.60 €'), findsOneWidget);
+
+    // Tap sur la carte comparative
+    final storeTarget = find.text('Lidl').first;
+    await tester.ensureVisible(storeTarget);
+    await tester.tap(storeTarget);
+    await tester.pump();
+
+    expect(tappedId, '300000777777');
+    expect(tappedName, 'Jus d\'Orange');
+    expect(tappedTab, 2); // Onglet 2 = Magasins
+  });
 }

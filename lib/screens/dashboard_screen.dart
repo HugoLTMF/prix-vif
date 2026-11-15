@@ -73,6 +73,19 @@ class DashboardScreen extends StatelessWidget {
                     onViewAllProducts: onProductAnalysisRequested,
                   ),
                   const SizedBox(height: 24),
+
+                  // Comparateur multi-magasins
+                  _ProductStoreComparisonSection(
+                    comparisons: stats.storeComparisons,
+                    onProductTap: (productId, productName) => _handleProductTap(
+                      context,
+                      productId,
+                      productName,
+                      initialTabIndex: 2,
+                    ),
+                    onViewAllProducts: onProductAnalysisRequested,
+                  ),
+                  const SizedBox(height: 24),
                   
                   // Comparaison par type de produit (Open Food Facts)
                   _ProductTypeComparisonSection(
@@ -165,6 +178,9 @@ class DashboardScreen extends StatelessWidget {
     // Calculer l'évolution des prix par produit
     final productEvolutions = ProductPriceEvolutionItem.calculate(sessions);
 
+    // Calculer les comparaisons de prix par magasin pour les mêmes produits
+    final storeComparisons = ProductStoreComparisonItem.calculate(sessions);
+
     // Calculer les statistiques par semaine
     final weeklyStats = _calculateWeeklyStats(sessions);
     
@@ -189,6 +205,7 @@ class DashboardScreen extends StatelessWidget {
       nutriScoreDistribution: nutriscoreCounts,
       productTypeStats: productTypeStats,
       productEvolutions: productEvolutions,
+      storeComparisons: storeComparisons,
       weeklyStats: weeklyStats,
       monthlyStats: monthlyStats,
       weeklyTotal: weeklyTotal,
@@ -265,6 +282,7 @@ class _DashboardStats {
   final Map<String, int> nutriScoreDistribution;
   final Map<String, _ProductTypeStats> productTypeStats;
   final List<ProductPriceEvolutionItem> productEvolutions;
+  final List<ProductStoreComparisonItem> storeComparisons;
   final Map<String, _PeriodStats> weeklyStats;
   final Map<String, _PeriodStats> monthlyStats;
   final double weeklyTotal;
@@ -278,6 +296,7 @@ class _DashboardStats {
     required this.nutriScoreDistribution,
     required this.productTypeStats,
     required this.productEvolutions,
+    required this.storeComparisons,
     required this.weeklyStats,
     required this.monthlyStats,
     required this.weeklyTotal,
@@ -1059,6 +1078,482 @@ class _ProductPriceEvolutionCard extends StatelessWidget {
                 Icons.chevron_right,
                 size: 16,
                 color: AppTheme.textMuted,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ==================== COMPARATEUR MULTI-MAGASINS ====================
+
+class _StorePriceObservation {
+  final double price;
+  final DateTime date;
+
+  _StorePriceObservation({required this.price, required this.date});
+}
+
+/// Comparaison multi-magasins d'un produit pour le tableau de bord
+class ProductStoreComparisonItem {
+  final String productId;
+  final String name;
+  final String? brand;
+  final String? barcode;
+  final String? imageUrl;
+  final String cheapestStore;
+  final double cheapestPrice;
+  final String mostExpensiveStore;
+  final double mostExpensivePrice;
+  final int storeCount;
+  final Map<String, double> latestPriceByStore;
+
+  ProductStoreComparisonItem({
+    required this.productId,
+    required this.name,
+    this.brand,
+    this.barcode,
+    this.imageUrl,
+    required this.cheapestStore,
+    required this.cheapestPrice,
+    required this.mostExpensiveStore,
+    required this.mostExpensivePrice,
+    required this.storeCount,
+    required this.latestPriceByStore,
+  });
+
+  /// Écart absolu entre le magasin le plus cher et le moins cher
+  double get priceDiff => mostExpensivePrice - cheapestPrice;
+
+  /// Pourcentage d'économie possible
+  double get savingPercent {
+    if (mostExpensivePrice <= 0) return 0.0;
+    return (priceDiff / mostExpensivePrice) * 100;
+  }
+
+  bool get hasPriceDifference => priceDiff > 0.01;
+
+  /// Calcule les comparaisons inter-magasins depuis les sessions
+  static List<ProductStoreComparisonItem> calculate(List<ScanSession> sessions) {
+    final productStoreMap = <String, Map<String, _StorePriceObservation>>{};
+    final productMetaMap = <String, _ArticleObservation>{};
+
+    for (final session in sessions) {
+      for (final item in session.items) {
+        final rawStore = (item.storeName ?? session.storeName ?? '').trim();
+        if (rawStore.isEmpty) continue;
+
+        final key = (item.barcode != null && item.barcode!.trim().isNotEmpty)
+            ? 'bc_${item.barcode!.trim()}'
+            : 'name_${item.name.trim().toLowerCase()}_${(item.brand ?? '').trim().toLowerCase()}';
+
+        productMetaMap.putIfAbsent(key, () => _ArticleObservation(
+          id: item.id,
+          name: item.name,
+          brand: item.brand,
+          barcode: item.barcode,
+          imageUrl: item.imageUrl,
+          price: item.price,
+          date: item.scanDate,
+          storeName: rawStore,
+        ));
+
+        final storeMap = productStoreMap.putIfAbsent(key, () => {});
+        final existing = storeMap[rawStore];
+        if (existing == null || item.scanDate.isAfter(existing.date)) {
+          storeMap[rawStore] = _StorePriceObservation(
+            price: item.price,
+            date: item.scanDate,
+          );
+        }
+      }
+    }
+
+    final comparisons = <ProductStoreComparisonItem>[];
+
+    for (final entry in productStoreMap.entries) {
+      final key = entry.key;
+      final storePrices = entry.value;
+
+      if (storePrices.length < 2) continue;
+
+      final meta = productMetaMap[key]!;
+      final latestPriceByStore = storePrices.map((s, obs) => MapEntry(s, obs.price));
+
+      var cheapestStore = '';
+      var cheapestPrice = double.infinity;
+      var mostExpensiveStore = '';
+      var mostExpensivePrice = 0.0;
+
+      for (final sEntry in latestPriceByStore.entries) {
+        if (sEntry.value < cheapestPrice) {
+          cheapestPrice = sEntry.value;
+          cheapestStore = sEntry.key;
+        }
+        if (sEntry.value > mostExpensivePrice) {
+          mostExpensivePrice = sEntry.value;
+          mostExpensiveStore = sEntry.key;
+        }
+      }
+
+      final productId = (meta.barcode != null && meta.barcode!.trim().isNotEmpty)
+          ? meta.barcode!.trim()
+          : (meta.name.trim().isNotEmpty ? meta.name.trim() : meta.id);
+
+      comparisons.add(ProductStoreComparisonItem(
+        productId: productId,
+        name: meta.name,
+        brand: meta.brand,
+        barcode: meta.barcode,
+        imageUrl: meta.imageUrl,
+        cheapestStore: cheapestStore,
+        cheapestPrice: cheapestPrice,
+        mostExpensiveStore: mostExpensiveStore,
+        mostExpensivePrice: mostExpensivePrice,
+        storeCount: storePrices.length,
+        latestPriceByStore: latestPriceByStore,
+      ));
+    }
+
+    comparisons.sort((a, b) => b.priceDiff.compareTo(a.priceDiff));
+
+    return comparisons;
+  }
+}
+
+/// Section comparateur multi-magasins sur le tableau de bord
+class _ProductStoreComparisonSection extends StatelessWidget {
+  static const int _maxDisplayed = 5;
+
+  final List<ProductStoreComparisonItem> comparisons;
+  final void Function(String productId, String productName) onProductTap;
+  final VoidCallback? onViewAllProducts;
+
+  const _ProductStoreComparisonSection({
+    required this.comparisons,
+    required this.onProductTap,
+    this.onViewAllProducts,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final displayed = comparisons.take(_maxDisplayed).toList();
+    final remainingCount = comparisons.length - displayed.length;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.store,
+                  color: AppTheme.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Comparateur multi-magasins',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            if (onViewAllProducts != null)
+              TextButton(
+                onPressed: onViewAllProducts,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: const Text(
+                  'Tous',
+                  style: TextStyle(
+                    color: AppTheme.primary,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          comparisons.isNotEmpty
+              ? 'Écarts de prix constatés pour un même produit selon l\'enseigne'
+              : 'Comparez les prix d\'un même article entre vos magasins habituels',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: AppTheme.textMuted,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: AppTheme.glassmorphism(),
+          padding: const EdgeInsets.all(14),
+          child: comparisons.isEmpty
+              ? _buildEmptyState(context)
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    ...displayed.map((item) => _ProductStoreComparisonCard(
+                          item: item,
+                          onTap: () => onProductTap(item.productId, item.name),
+                        )),
+                    if (remainingCount > 0 && onViewAllProducts != null)
+                      Center(
+                        child: TextButton.icon(
+                          onPressed: onViewAllProducts,
+                          icon: const Icon(Icons.arrow_forward, size: 14, color: AppTheme.primary),
+                          label: Text(
+                            'Voir les $remainingCount autres comparaisons',
+                            style: const TextStyle(
+                              color: AppTheme.primary,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: AppTheme.primary.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const Icon(
+            Icons.storefront_outlined,
+            color: AppTheme.primary,
+            size: 24,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Scannez dans plusieurs enseignes',
+                style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Dès qu\'un même produit sera scanné dans deux magasins différents, le meilleur prix et l\'économie réalisable apparaîtront ici automatiquement.',
+                style: TextStyle(
+                  color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                  fontSize: 12,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Carte comparative d'un produit entre magasins
+class _ProductStoreComparisonCard extends StatelessWidget {
+  final ProductStoreComparisonItem item;
+  final VoidCallback onTap;
+
+  const _ProductStoreComparisonCard({
+    required this.item,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final hasDiff = item.hasPriceDifference;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceDark,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: hasDiff
+                  ? AppTheme.primary.withValues(alpha: 0.3)
+                  : AppTheme.surfaceLight,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Ligne 1 : Nom du produit + Badge d'économie
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item.name,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: AppTheme.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        if (item.brand != null && item.brand!.isNotEmpty)
+                          Text(
+                            item.brand!,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: AppTheme.textMuted,
+                              fontSize: 11,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (hasDiff)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppTheme.primary.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(
+                          color: AppTheme.primary.withValues(alpha: 0.4),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.savings_outlined, size: 12, color: AppTheme.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            '-${item.priceDiff.toStringAsFixed(2)} € (-${item.savingPercent.toStringAsFixed(0)}%)',
+                            style: const TextStyle(
+                              color: AppTheme.primary,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // Ligne 2 : Comparatif des magasins
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundDark.withValues(alpha: 0.6),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    // Moins cher
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(Icons.emoji_events, size: 14, color: AppTheme.primary),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  item.cheapestStore,
+                                  style: const TextStyle(
+                                    color: AppTheme.primary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  '${item.cheapestPrice.toStringAsFixed(2)} €',
+                                  style: const TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (hasDiff) ...[
+                      Container(
+                        height: 24,
+                        width: 1,
+                        color: AppTheme.surfaceLight,
+                        margin: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                      // Plus cher
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item.mostExpensiveStore,
+                              style: const TextStyle(
+                                color: AppTheme.textMuted,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            Text(
+                              '${item.mostExpensivePrice.toStringAsFixed(2)} €',
+                              style: TextStyle(
+                                color: AppTheme.textSecondary.withValues(alpha: 0.8),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                decoration: TextDecoration.lineThrough,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    const Icon(
+                      Icons.chevron_right,
+                      size: 16,
+                      color: AppTheme.textMuted,
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
