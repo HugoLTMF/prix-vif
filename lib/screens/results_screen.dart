@@ -66,8 +66,6 @@ class _ResultsScreenState extends State<ResultsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
     return Scaffold(
       backgroundColor: AppTheme.backgroundDark,
       appBar: AppBar(

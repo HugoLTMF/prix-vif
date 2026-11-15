@@ -203,19 +203,8 @@ class ScanRepository {
     await _productsBox.put(product.ean, product.toMap());
   }
 
-  /// Vérifie si un produit est en cache
-  bool hasProductInCache(String ean) {
-    return _productsBox.containsKey(ean);
-  }
-
-  /// Nombre total de produits en cache
-  int get cachedProductCount => _productsBox.length;
-
   /// Nombre total de scans persistés
   int get scanCount => _scansBox.length;
-
-  /// Nombre total d'articles persistés
-  int get articleCount => _articlesBox.length;
 
   // ==========================================
   // Extractions Mistral — Pour rejouer sans coût
@@ -225,43 +214,6 @@ class ScanRepository {
   Future<void> saveMistralExtraction(StoredMistralExtraction extraction) async {
     await _mistralExtractionsBox.put(extraction.id, extraction.toMap());
   }
-
-  /// Récupère une extraction Mistral par ID
-  StoredMistralExtraction? getMistralExtraction(String id) {
-    final map = _mistralExtractionsBox.get(id);
-    if (map == null) return null;
-    return StoredMistralExtraction.fromMap(map);
-  }
-
-  /// Récupère toutes les extractions Mistral pour un scan donné
-  List<StoredMistralExtraction> getMistralExtractionsForScan(String scanId) {
-    final extractions = <StoredMistralExtraction>[];
-    for (final key in _mistralExtractionsBox.keys) {
-      final map = _mistralExtractionsBox.get(key);
-      if (map == null) continue;
-      final extraction = StoredMistralExtraction.fromMap(map);
-      if (extraction.scanId == scanId) {
-        extractions.add(extraction);
-      }
-    }
-    return extractions;
-  }
-
-  /// Supprime une extraction Mistral
-  Future<void> deleteMistralExtraction(String id) async {
-    await _mistralExtractionsBox.delete(id);
-  }
-
-  /// Supprime toutes les extractions Mistral pour un scan
-  Future<void> deleteMistralExtractionsForScan(String scanId) async {
-    final extractions = getMistralExtractionsForScan(scanId);
-    for (final extraction in extractions) {
-      await deleteMistralExtraction(extraction.id);
-    }
-  }
-
-  /// Nombre total d'extractions Mistral persistées
-  int get mistralExtractionCount => _mistralExtractionsBox.length;
 
   // ==========================================
   // Scans en attente — Mode hors-ligne (Étape 5c)
@@ -286,21 +238,9 @@ class ScanRepository {
     return pending;
   }
 
-  /// Récupère un scan en attente par ID
-  PendingOfflineScan? getPendingOfflineScan(String id) {
-    final map = _pendingOfflineScansBox.get(id);
-    if (map == null) return null;
-    return PendingOfflineScan.fromMap(map);
-  }
-
   /// Supprime un scan en attente
   Future<void> deletePendingOfflineScan(String id) async {
     await _pendingOfflineScansBox.delete(id);
-  }
-
-  /// Supprime tous les scans en attente
-  Future<void> clearAllPendingOfflineScans() async {
-    await _pendingOfflineScansBox.clear();
   }
 
   /// Vérifie s'il y a des scans en attente
@@ -325,72 +265,6 @@ class ScanRepository {
       }
     }
     return allArticles;
-  }
-
-  /// Récupère tous les articles par nom de produit
-  List<StoredArticle> getArticlesByProductName(String productName) {
-    final allArticles = getAllStoredArticles();
-    return allArticles
-        .where((article) => 
-            article.name.toLowerCase().contains(productName.toLowerCase()))
-        .toList();
-  }
-
-  /// Récupère tous les articles par code-barres (EAN)
-  List<StoredArticle> getArticlesByBarcode(String barcode) {
-    final allArticles = getAllStoredArticles();
-    return allArticles
-        .where((article) => article.barcode == barcode)
-        .toList();
-  }
-
-  /// Récupère tous les articles par nom de magasin
-  List<StoredArticle> getArticlesByStore(String storeName) {
-    final allArticles = getAllStoredArticles();
-    return allArticles
-        .where((article) => article.storeName == storeName)
-        .toList();
-  }
-
-  /// Récupère l'historique des prix d'un produit dans un magasin spécifique
-  /// Retourne une liste de PricePoint triée par date
-  List<Map<String, dynamic>> getPriceHistory(String productId, String storeName) {
-    final history = <Map<String, dynamic>>[];
-    
-    for (final key in _articlesBox.keys) {
-      final articleMap = _articlesBox.get(key);
-      if (articleMap == null) continue;
-      
-      // On identifie le produit par son ID ou son barcode
-      final articleProductId = articleMap['id'] as String?;
-      final articleBarcode = articleMap['barcode'] as String?;
-      final articleStore = articleMap['storeName'] as String?;
-      
-      // Correspondance par ID ou par barcode (si ID = productId ou barcode = productId)
-      final matchesProduct = articleProductId == productId || 
-          articleBarcode == productId ||
-          (articleMap['name'] as String?) == productId;
-      
-      if (matchesProduct && articleStore == storeName) {
-        history.add({
-          'id': key,
-          'date': articleMap['scanDate'],
-          'price': articleMap['price'],
-          'quantity': articleMap['quantity'],
-          'unit': articleMap['unit'],
-          'name': articleMap['name'],
-          'brand': articleMap['brand'],
-          'barcode': articleMap['barcode'],
-        });
-      }
-    }
-    
-    // Tri par date croissante
-    history.sort((a, b) => 
-        DateTime.parse(a['date'] as String).compareTo(
-            DateTime.parse(b['date'] as String)));
-    
-    return history;
   }
 
   /// Récupère l'historique des prix d'un produit dans tous les magasins
@@ -573,34 +447,6 @@ class ScanRepository {
     return similarProducts;
   }
 
-  /// Récupère la comparaison des prix d'un produit entre tous les magasins
-  Map<String, dynamic> getStorePriceComparison(String productId) {
-    final historyByStore = getPriceHistoryByStore(productId);
-    final comparison = <String, dynamic>{};
-    
-    for (final entry in historyByStore.entries) {
-      final storeName = entry.key;
-      final pricePoints = entry.value;
-      
-      if (pricePoints.isNotEmpty) {
-        final prices = pricePoints.map((p) => p['price'] as double).toList();
-        final avgPrice = prices.reduce((a, b) => a + b) / prices.length;
-        final lastPrice = pricePoints.last['price'] as double;
-        final lastScanDate = DateTime.parse(pricePoints.last['date'] as String);
-        
-        comparison[storeName] = {
-          'storeName': storeName,
-          'averagePrice': avgPrice,
-          'lastPrice': lastPrice,
-          'lastScanDate': lastScanDate.toIso8601String(),
-          'scanCount': pricePoints.length,
-        };
-      }
-    }
-    
-    return comparison;
-  }
-
   /// Supprime un magasin de tous les articles d'un produit
   /// Met à jour le storeName à null pour tous les articles correspondants
   Future<void> removeStoreFromProduct(String storeName, String productId) async {
@@ -637,21 +483,4 @@ class ScanRepository {
     }
   }
 
-  /// Récupère la liste des noms de magasins uniques pour un produit
-  List<String> getStoresForProduct(String productId) {
-    final allArticles = getAllStoredArticles();
-    final stores = <String>{};
-    
-    for (final article in allArticles) {
-      final matchesProduct = article.id == productId || 
-          article.barcode == productId ||
-          article.name == productId;
-      
-      if (matchesProduct && article.storeName != null) {
-        stores.add(article.storeName!);
-      }
-    }
-    
-    return stores.toList();
-  }
 }
