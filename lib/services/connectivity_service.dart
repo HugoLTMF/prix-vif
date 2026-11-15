@@ -215,19 +215,12 @@ class ConnectivityService with WidgetsBindingObserver {
     debugPrint('💾 [ConnectivityService] Scan stocké pour traitement hors-ligne: ${pendingScan.id}');
   }
 
-  /// Vérifie s'il y a des scans en attente
-  bool hasPendingScans() {
-    if (_repository == null) return false;
-    return _repository!.hasPendingOfflineScans();
-  }
-
   /// Obtient le nombre de scans en attente
   int get pendingScanCount {
     if (_repository == null) return 0;
     return _repository!.pendingOfflineScanCount;
   }
 
-  @override
   void dispose() {
     _connectivitySubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);

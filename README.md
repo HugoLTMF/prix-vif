@@ -8,6 +8,13 @@
 
 ## 📋 Historique des versions
 
+### v1.0.3 — 2026-11-14 — Nettoyage du code mort
+
+- **Supprimé** : 16 méthodes/getters jamais appelés dans `ScanRepository` (`getPriceHistory`, `getStorePriceComparison`, `getStoresForProduct`, `getArticlesByStore/ByBarcode/ByProductName`, `deleteMistralExtractionsForScan`, `getMistralExtraction(s)`, `getPendingOfflineScan`, `clearAllPendingOfflineScans`, `hasProductInCache`, `cachedProductCount`, `articleCount`, `mistralExtractionCount`)
+- **Supprimé** : champs et animations jamais lus (`_isOnline`, `_buttonScale`, `_scaleAnimation`, `_shimmerAnimation`), variables locales `theme` inutilisées (dashboard, résultats), `_formatDate` dans `price_card.dart`, `ConnectivityService.hasPendingScans()`, `CameraService.hasError`
+- **Corrigé** : `@override` injustifié sur `dispose()` de `ConnectivityService`
+- `flutter analyze` : 0 warning `unused`/`dead_code` (151 → 143 issues, le reste = dépréciations `withOpacity` préexistantes)
+
 ### v1.0.2 — 2026-11-14 — Fix feedback du mode ticket (bouton Analyser bloqué)
 
 - **Corrigé** : en mode ticket, les erreurs (capture, compression, analyse IA) n'étaient affichées nulle part (le bandeau d'erreur n'existait qu'en mode code-barres) → erreur désormais visible en rouge dans la zone ticket
@@ -357,7 +364,7 @@ Les contributions sont bienvenues ! Ouvrez un Issue ou Pull Request.
 
 *© 2026 - Prix Vif Scanner - Application complète de scan alimentaire*
 
-*Dernière mise à jour : 14 Novembre 2026 (v1.0.2 — voir Historique des versions)*
+*Dernière mise à jour : 14 Novembre 2026 (v1.0.3 — voir Historique des versions)*
 *Documentation technique : Voir AGENT.MD pour les détails d'implémentation*
 *Règles IA : Voir CLAUDE.md (le README est versionné à chaque étape)*
 *Statut : ✅ Dashboard fiable - Synchronisation temps réel fonctionnelle*

@@ -19,8 +19,6 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    
     // Debug: afficher le nombre de sessions
     print('DEBUG Dashboard: sessions.length = ${sessions.length}');
     print('DEBUG Dashboard: sessions.isEmpty = ${sessions.isEmpty}');

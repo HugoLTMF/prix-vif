@@ -15,7 +15,6 @@ class CameraService {
   bool get isTorchEnabled => _isTorchEnabled;
   bool get isScanning => _isScanning;
   bool get isInitialized => _isInitialized;
-  bool get hasError => _hasError;
   String? get errorMessage => _errorMessage;
 
   CameraService();

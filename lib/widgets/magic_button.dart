@@ -31,7 +31,6 @@ class MagicButton extends StatefulWidget {
 class _MagicButtonState extends State<MagicButton> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _glowAnimation;
-  late Animation<double> _scaleAnimation;
   bool _isHovered = false;
 
   @override
@@ -43,10 +42,6 @@ class _MagicButtonState extends State<MagicButton> with SingleTickerProviderStat
     )..repeat(reverse: true);
 
     _glowAnimation = Tween<double>(begin: 0.8, end: 1.2).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
-
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 1.02).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
     );
   }
@@ -219,7 +214,6 @@ class ScanningButton extends StatefulWidget {
 
 class _ScanningButtonState extends State<ScanningButton> with SingleTickerProviderStateMixin {
   late AnimationController _shimmerController;
-  late Animation<double> _shimmerAnimation;
 
   @override
   void initState() {
@@ -228,10 +222,6 @@ class _ScanningButtonState extends State<ScanningButton> with SingleTickerProvid
       vsync: this,
       duration: const Duration(seconds: 1),
     )..repeat();
-
-    _shimmerAnimation = Tween<double>(begin: -1, end: 2).animate(
-      CurvedAnimation(parent: _shimmerController, curve: Curves.linear),
-    );
   }
 
   @override
