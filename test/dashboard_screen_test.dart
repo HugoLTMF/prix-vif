@@ -566,4 +566,72 @@ void main() {
     expect(tappedName, 'Café Moulu Premium');
     expect(tappedTab, 3); // Onglet 3 = Similaires
   });
+
+  testWidgets('Dashboard compare les enseignes par type de produit et permet la bascule par enseigne',
+      (WidgetTester tester) async {
+    final t0 = DateTime(2026, 11, 5);
+    final sessions = [
+      ScanSession(
+        id: 'sess_mat_leclerc',
+        date: t0,
+        type: 'barcode',
+        storeName: 'Leclerc',
+        items: [
+          ScannedItem(
+            id: 'm_lait',
+            name: 'Lait Écrémé',
+            price: 1.15,
+            scanDate: t0,
+            storeName: 'Leclerc',
+            categories: ['Foods', 'Beverages', 'Milks'],
+          ),
+        ],
+      ),
+      ScanSession(
+        id: 'sess_mat_carrefour',
+        date: t0,
+        type: 'barcode',
+        storeName: 'Carrefour',
+        items: [
+          ScannedItem(
+            id: 'c_lait',
+            name: 'Lait Entier',
+            price: 1.55,
+            scanDate: t0,
+            storeName: 'Carrefour',
+            categories: ['Foods', 'Beverages', 'Milks'],
+          ),
+        ],
+      ),
+    ];
+
+    await tester.pumpWidget(MaterialApp(
+      home: DashboardScreen(
+        sessions: sessions,
+        onSessionSelected: (_) {},
+      ),
+    ));
+
+    // Section présente avec comparatif enseignes
+    expect(find.text('Comparaison par type de produit'), findsOneWidget);
+    expect(find.text('Par type de produit'), findsOneWidget);
+    expect(find.text('Par enseigne'), findsOneWidget);
+
+    // Comparatif enseignes visible pour Milks
+    final compEnseignes = find.textContaining('Comparatif enseignes (2)');
+    await tester.ensureVisible(compEnseignes);
+    expect(compEnseignes, findsOneWidget);
+    expect(find.textContaining('Écart : 0.40 €/art'), findsOneWidget);
+
+    // Basculer vers la vue "Par enseigne"
+    final byStoreChip = find.text('Par enseigne');
+    await tester.ensureVisible(byStoreChip);
+    await tester.tap(byStoreChip);
+    await tester.pump();
+
+    // Vérifier les cartes par magasin avec distinctions
+    expect(find.text('Leclerc'), findsWidgets);
+    expect(find.text('Carrefour'), findsWidgets);
+    expect(find.textContaining('Moins cher sur : Milks'), findsOneWidget);
+  });
 }

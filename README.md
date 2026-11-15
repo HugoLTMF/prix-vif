@@ -8,6 +8,13 @@
 
 ## 📋 Historique des versions
 
+### v1.5.0 — 2026-11-15 — Comparatif enseignes × types de produits dans le Dashboard (Étape 4/4)
+
+- **Ajouté** : matrice et comparatif inter-magasins directement intégrés dans la section « Comparaison par type de produit »
+- **Ajouté** : affichage pour chaque catégorie du classement des enseignes du moins cher au plus cher, mise en avant du magasin leader (🥇) et calcul de l'écart de prix au sein de la catégorie
+- **Ajouté** : bascule interactive par vue : « Par type de produit » (avec comparatif enseignes par rayon) et « Par enseigne » (avec identification des catégories où chaque magasin est le plus compétitif)
+- **Ajouté** : modèle d'agrégation `_ProductTypeStoreStats` dans `_ProductTypeStats` et suite de tests d'interaction dans `dashboard_screen_test.dart`
+
 ### v1.4.0 — 2026-11-15 — Recommandations d'alternatives moins chères dans le Dashboard (Étape 3/4)
 
 - **Ajouté** : section « Alternatives moins chères » directement intégrée sur le Dashboard identifiant proactivement les produits équivalents (même type ou catégorie OFF, ou famille de produit) moins chers repérés dans d'autres enseignes
@@ -105,7 +112,7 @@
 - **Évolution des prix des produits** : suivi des variations (hausses, baisses, stabilités) avec accès direct à la courbe détaillée
 - **Comparateur multi-magasins** : identification des écarts de prix inter-enseignes et calcul des économies potentielles par produit
 - **Alternatives moins chères** : suggestions proactives de produits équivalents plus économiques repérés dans d'autres enseignes avec calcul des gains
-- **Comparaison par type de produit** : prix moyen et fourchettes par catégorie Open Food Facts
+- **Comparaison par type de produit & enseignes** : prix moyen par catégorie OFF, classement des magasins par rayon et vue par enseigne mettant en valeur les forces de chaque magasin
 - **Répartition Nutri-Score** : graphique à barres horizontales avec pourcentages A/B/C/D/E
 - **Évolution temporelle** : graphiques hebdomadaires et mensuels des dépenses
 - **Totaux par période** : cumul semaine et mois en cours
@@ -396,7 +403,7 @@ Les contributions sont bienvenues ! Ouvrez un Issue ou Pull Request.
 
 *© 2026 - Prix Vif Scanner - Application complète de scan alimentaire*
 
-*Dernière mise à jour : 15 Novembre 2026 (v1.4.0 — voir Historique des versions)*
+*Dernière mise à jour : 15 Novembre 2026 (v1.5.0 — voir Historique des versions)*
 *Documentation technique : Voir AGENT.MD pour les détails d'implémentation*
 *Règles IA : Voir CLAUDE.md (le README est versionné à chaque étape)*
 *Statut : ✅ Dashboard fiable - Synchronisation temps réel fonctionnelle*

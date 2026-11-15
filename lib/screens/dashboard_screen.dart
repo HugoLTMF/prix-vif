@@ -181,11 +181,15 @@ class DashboardScreen extends StatelessWidget {
     
     // Calculer les statistiques par type de produit (catégorie OFF la plus spécifique)
     final productTypeStats = <String, _ProductTypeStats>{};
-    for (final item in allItems) {
-      final type = productTypeLabel(item.categories);
-      productTypeStats
-          .putIfAbsent(type, () => _ProductTypeStats())
-          .addItem(item.price);
+    for (final session in sessions) {
+      for (final item in session.items) {
+        final type = productTypeLabel(item.categories);
+        final rawStore = (item.storeName ?? session.storeName ?? '').trim();
+        final storeName = rawStore.isNotEmpty ? rawStore : null;
+        productTypeStats
+            .putIfAbsent(type, () => _ProductTypeStats())
+            .addItem(item.price, storeName: storeName);
+      }
     }
     
     // Calculer l'évolution des prix par produit
@@ -323,12 +327,15 @@ class _DashboardStats {
   });
 }
 
-/// Statistiques agrégées pour un type de produit (catégorie OFF)
-class _ProductTypeStats {
+/// Statistiques d'un magasin pour un type de produit donné
+class _ProductTypeStoreStats {
+  final String storeName;
   int itemCount = 0;
   double totalAmount = 0.0;
   double minPrice = double.infinity;
   double maxPrice = 0.0;
+
+  _ProductTypeStoreStats({required this.storeName});
 
   void addItem(double price) {
     itemCount += 1;
@@ -338,6 +345,45 @@ class _ProductTypeStats {
   }
 
   double get averagePrice => itemCount > 0 ? totalAmount / itemCount : 0.0;
+}
+
+/// Statistiques agrégées pour un type de produit (catégorie OFF)
+class _ProductTypeStats {
+  int itemCount = 0;
+  double totalAmount = 0.0;
+  double minPrice = double.infinity;
+  double maxPrice = 0.0;
+  final Map<String, _ProductTypeStoreStats> storeStats = {};
+
+  void addItem(double price, {String? storeName}) {
+    itemCount += 1;
+    totalAmount += price;
+    if (price < minPrice) minPrice = price;
+    if (price > maxPrice) maxPrice = price;
+
+    if (storeName != null && storeName.trim().isNotEmpty) {
+      final clean = storeName.trim();
+      storeStats
+          .putIfAbsent(clean, () => _ProductTypeStoreStats(storeName: clean))
+          .addItem(price);
+    }
+  }
+
+  double get averagePrice => itemCount > 0 ? totalAmount / itemCount : 0.0;
+
+  /// Magasins triés du moins cher au plus cher en moyenne
+  List<_ProductTypeStoreStats> get storesSortedByAveragePrice {
+    final list = storeStats.values.toList()
+      ..sort((a, b) => a.averagePrice.compareTo(b.averagePrice));
+    return list;
+  }
+
+  /// Écart absolu entre le magasin le plus cher et le moins cher pour ce type
+  double get storePriceSpread {
+    final sorted = storesSortedByAveragePrice;
+    if (sorted.length < 2) return 0.0;
+    return sorted.last.averagePrice - sorted.first.averagePrice;
+  }
 }
 
 /// Statistiques pour une période
@@ -2238,7 +2284,7 @@ class _ProductRecommendationCard extends StatelessWidget {
 
 // ==================== COMPARAISON PAR TYPE DE PRODUIT ====================
 
-class _ProductTypeComparisonSection extends StatelessWidget {
+class _ProductTypeComparisonSection extends StatefulWidget {
   static const int _maxVisibleTypes = 8;
 
   final Map<String, _ProductTypeStats> productTypeStats;
@@ -2250,12 +2296,21 @@ class _ProductTypeComparisonSection extends StatelessWidget {
   });
 
   @override
+  State<_ProductTypeComparisonSection> createState() =>
+      _ProductTypeComparisonSectionState();
+}
+
+class _ProductTypeComparisonSectionState
+    extends State<_ProductTypeComparisonSection> {
+  int _selectedView = 0; // 0 = Par type de produit, 1 = Par enseigne
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     // Séparer les vrais types OFF des articles non catégorisés
-    final uncategorized = productTypeStats[uncategorizedTypeLabel];
-    final categorizedEntries = productTypeStats.entries
+    final uncategorized = widget.productTypeStats[uncategorizedTypeLabel];
+    final categorizedEntries = widget.productTypeStats.entries
         .where((e) => e.key != uncategorizedTypeLabel)
         .toList()
       ..sort((a, b) => b.value.totalAmount.compareTo(a.value.totalAmount));
@@ -2264,7 +2319,19 @@ class _ProductTypeComparisonSection extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    final visibleEntries = categorizedEntries.take(_maxVisibleTypes).toList();
+    // Calculer les données par enseigne pour la vue comparative
+    final storesMap = <String, Map<String, _ProductTypeStoreStats>>{};
+    for (final entry in widget.productTypeStats.entries) {
+      final type = entry.key;
+      for (final storeEntry in entry.value.storeStats.entries) {
+        final storeName = storeEntry.key;
+        storesMap.putIfAbsent(storeName, () => {})[type] = storeEntry.value;
+      }
+    }
+    final hasMultiStores = storesMap.length >= 2;
+
+    final visibleEntries =
+        categorizedEntries.take(_ProductTypeComparisonSection._maxVisibleTypes).toList();
     final hiddenCount = categorizedEntries.length - visibleEntries.length;
     final maxAverage = visibleEntries.isEmpty
         ? 0.0
@@ -2275,75 +2342,286 @@ class _ProductTypeComparisonSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Comparaison par type de produit',
-          style: theme.textTheme.titleMedium?.copyWith(
-            color: AppTheme.textPrimary,
-            fontWeight: FontWeight.w700,
-          ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Comparaison par type de produit',
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    hasMultiStores
+                        ? 'Prix moyen par type (Open Food Facts) et comparatif inter-magasins'
+                        : 'Prix moyen par type (catégories Open Food Facts)',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 4),
-        Text(
-          'Prix moyen par type (catégories Open Food Facts)',
-          style: theme.textTheme.bodySmall?.copyWith(
-            color: AppTheme.textMuted,
+        if (hasMultiStores) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _buildViewChip(0, 'Par type de produit', Icons.category_outlined),
+              const SizedBox(width: 8),
+              _buildViewChip(1, 'Par enseigne', Icons.store),
+            ],
           ),
-        ),
+        ],
         const SizedBox(height: 12),
         Container(
           decoration: AppTheme.glassmorphism(),
           padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              ...visibleEntries.map((entry) {
-                final stats = entry.value;
-                final ratio = maxAverage > 0
-                    ? (stats.averagePrice / maxAverage).clamp(0.0, 1.0)
-                    : 0.0;
-                // Un type plus cher que la moyenne globale est mis en évidence
-                final color = stats.averagePrice >= globalAveragePrice
-                    ? AppTheme.warning
-                    : AppTheme.primary;
-                return _ProductTypeBar(
-                  type: entry.key,
-                  stats: stats,
-                  ratio: ratio.toDouble(),
-                  color: color,
-                );
-              }),
-              if (hiddenCount > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    '+ $hiddenCount autres types',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppTheme.textMuted,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ),
-              if (uncategorized != null && uncategorized.itemCount > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    '${uncategorized.itemCount} article${uncategorized.itemCount > 1 ? 's' : ''} non catégorisé${uncategorized.itemCount > 1 ? 's' : ''}',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: AppTheme.textMuted,
-                      fontStyle: FontStyle.italic,
-                    ),
-                  ),
-                ),
-              if (categorizedEntries.isEmpty && uncategorized != null)
-                Text(
-                  'Aucun type Open Food Facts disponible pour le moment',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-            ],
-          ),
+          child: _selectedView == 0 || !hasMultiStores
+              ? Column(
+                  children: [
+                    ...visibleEntries.map((entry) {
+                      final stats = entry.value;
+                      final ratio = maxAverage > 0
+                          ? (stats.averagePrice / maxAverage).clamp(0.0, 1.0)
+                          : 0.0;
+                      final color = stats.averagePrice >= widget.globalAveragePrice
+                          ? AppTheme.warning
+                          : AppTheme.primary;
+                      return _ProductTypeBar(
+                        type: entry.key,
+                        stats: stats,
+                        ratio: ratio.toDouble(),
+                        color: color,
+                      );
+                    }),
+                    if (hiddenCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4),
+                        child: Text(
+                          '+ $hiddenCount autres types',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppTheme.textMuted,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    if (uncategorized != null && uncategorized.itemCount > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: Text(
+                          '${uncategorized.itemCount} article${uncategorized.itemCount > 1 ? 's' : ''} non catégorisé${uncategorized.itemCount > 1 ? 's' : ''}',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: AppTheme.textMuted,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      ),
+                    if (categorizedEntries.isEmpty && uncategorized != null)
+                      Text(
+                        'Aucun type Open Food Facts disponible pour le moment',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                  ],
+                )
+              : _buildStoresView(storesMap),
         ),
       ],
+    );
+  }
+
+  Widget _buildViewChip(int index, String label, IconData icon) {
+    final isSelected = _selectedView == index;
+    return InkWell(
+      onTap: () => setState(() => _selectedView = index),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? AppTheme.primary.withValues(alpha: 0.2)
+              : AppTheme.surfaceDark,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isSelected ? AppTheme.primary : AppTheme.surfaceLight,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: isSelected ? AppTheme.primary : AppTheme.textSecondary,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                color: isSelected ? AppTheme.primary : AppTheme.textSecondary,
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStoresView(
+      Map<String, Map<String, _ProductTypeStoreStats>> storesMap) {
+    final theme = Theme.of(context);
+    final sortedStores = storesMap.keys.toList()..sort();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: sortedStores.map((storeName) {
+        final typesMap = storesMap[storeName]!;
+        final cheapestTypes = typesMap.entries.where((e) {
+          final stats = widget.productTypeStats[e.key];
+          if (stats == null || stats.storesSortedByAveragePrice.isEmpty) {
+            return false;
+          }
+          return e.value.averagePrice <=
+              stats.storesSortedByAveragePrice.first.averagePrice + 0.001;
+        }).map((e) => e.key).toList();
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceDark,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppTheme.surfaceLight),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.store, size: 16, color: AppTheme.primary),
+                      const SizedBox(width: 6),
+                      Text(
+                        storeName,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    '${typesMap.length} type${typesMap.length > 1 ? 's' : ''}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textMuted,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+              if (cheapestTypes.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.emoji_events_outlined,
+                        size: 12,
+                        color: AppTheme.primary,
+                      ),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          'Moins cher sur : ${cheapestTypes.join(', ')}',
+                          style: const TextStyle(
+                            color: AppTheme.primary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 8),
+              ...typesMap.entries.map((e) {
+                final type = e.key;
+                final storeStats = e.value;
+                final globalTypeStats = widget.productTypeStats[type];
+                final isCheapest = globalTypeStats != null &&
+                    globalTypeStats.storesSortedByAveragePrice.isNotEmpty &&
+                    storeStats.averagePrice <=
+                        globalTypeStats
+                                .storesSortedByAveragePrice.first.averagePrice +
+                            0.001;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 3),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        type,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: AppTheme.textSecondary,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          if (isCheapest &&
+                              globalTypeStats.storesSortedByAveragePrice.length >= 2) ...[
+                            const Icon(
+                              Icons.check,
+                              size: 12,
+                              color: AppTheme.primary,
+                            ),
+                            const SizedBox(width: 3),
+                          ],
+                          Text(
+                            '${storeStats.averagePrice.toStringAsFixed(2)} €/art',
+                            style: TextStyle(
+                              color: isCheapest
+                                  ? AppTheme.primary
+                                  : AppTheme.textPrimary,
+                              fontSize: 12,
+                              fontWeight: isCheapest
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ],
+          ),
+        );
+      }).toList(),
     );
   }
 }
@@ -2365,6 +2643,7 @@ class _ProductTypeBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final sortedStores = stats.storesSortedByAveragePrice;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -2420,6 +2699,103 @@ class _ProductTypeBar extends StatelessWidget {
               ),
             ),
           ),
+          if (sortedStores.length >= 2) ...[
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.backgroundDark.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: AppTheme.primary.withValues(alpha: 0.2),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.store,
+                              size: 12, color: AppTheme.primary),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Comparatif enseignes (${sortedStores.length})',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: AppTheme.textSecondary,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (stats.storePriceSpread > 0.01)
+                        Text(
+                          'Écart : ${stats.storePriceSpread.toStringAsFixed(2)} €/art',
+                          style: const TextStyle(
+                            color: AppTheme.primary,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: sortedStores.asMap().entries.map((entry) {
+                      final idx = entry.key;
+                      final store = entry.value;
+                      final isCheapest = idx == 0;
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: isCheapest
+                              ? AppTheme.primary.withValues(alpha: 0.16)
+                              : AppTheme.surfaceDark,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: isCheapest
+                                ? AppTheme.primary.withValues(alpha: 0.5)
+                                : AppTheme.surfaceLight,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (isCheapest) ...[
+                              const Icon(
+                                Icons.emoji_events_outlined,
+                                size: 11,
+                                color: AppTheme.primary,
+                              ),
+                              const SizedBox(width: 3),
+                            ],
+                            Text(
+                              '${store.storeName} : ${store.averagePrice.toStringAsFixed(2)} €',
+                              style: TextStyle(
+                                color: isCheapest
+                                    ? AppTheme.primary
+                                    : AppTheme.textSecondary,
+                                fontSize: 11,
+                                fontWeight: isCheapest
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );
