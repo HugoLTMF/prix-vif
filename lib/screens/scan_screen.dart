@@ -70,7 +70,6 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
   
   // Service de connectivité (Étape 5c)
   final ConnectivityService _connectivityService = ConnectivityService();
-  bool _isOnline = true;
   
   // Service de caméra
   final CameraService _cameraService = CameraService();
@@ -78,7 +77,6 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
   final TextEditingController _storeController = TextEditingController();
   final TextEditingController _newStoreController = TextEditingController();
   late AnimationController _buttonController;
-  late Animation<double> _buttonScale;
 
   @override
   void initState() {
@@ -89,9 +87,6 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
     _buttonController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 300),
-    );
-    _buttonScale = Tween<double>(begin: 1.0, end: 0.95).animate(
-      CurvedAnimation(parent: _buttonController, curve: Curves.easeInOut),
     );
 
     // Étape 3c — Injecter le repository dans le service OFF pour le cache
@@ -105,9 +100,6 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
     }
     _connectivityService.setOffService(_offService);
     _connectivityService.onConnectivityChanged = (isOnline) {
-      setState(() {
-        _isOnline = isOnline;
-      });
       if (isOnline) {
         // Au retour du réseau, vérifier s'il y a des scans en attente
         _showPendingScansNotification();

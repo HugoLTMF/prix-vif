@@ -290,21 +290,6 @@ class PriceCardCompact extends StatelessWidget {
     );
   }
 
-  String _formatDate(DateTime date) {
-    final now = DateTime.now();
-    final difference = now.difference(date);
-    
-    if (difference.inDays == 0) {
-      if (difference.inHours < 1) {
-        return 'À l\'instant';
-      }
-      return 'Il y a ${difference.inHours}h';
-    } else if (difference.inDays == 1) {
-      return 'Hier';
-    } else {
-      return '${date.day}/${date.month}';
-    }
-  }
 }
 
 // Badge Nutri-Score premium
