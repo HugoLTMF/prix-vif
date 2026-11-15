@@ -8,6 +8,12 @@
 
 ## 📋 Historique des versions
 
+### v1.5.1 — 2026-11-15 — Données de démo complètes et initialisation Hive
+
+- **Ajouté** : enrichissement complet de `ScanSession.demoSessions` avec catégories Open Food Facts réelles (`Milks`, `Breads`, `Waters`, `Butters`, `Cheeses`, etc.), Nutri-Score, historique de prix et scans croisés multi-enseignes (Carrefour, Leclerc, Monoprix)
+- **Corrigé** : persistance automatique des données de démo dans Hive lors du tout premier démarrage (`_loadSessions`), permettant à l'analyse de produit, aux fiches détaillées et aux graphiques de fonctionner immédiatement sans aucun scan préalable
+- **Modifié** : nettoyage des logs de débogage obsolètes dans `main.dart`
+
 ### v1.5.0 — 2026-11-15 — Comparatif enseignes × types de produits dans le Dashboard (Étape 4/4)
 
 - **Ajouté** : matrice et comparatif inter-magasins directement intégrés dans la section « Comparaison par type de produit »
@@ -403,7 +409,7 @@ Les contributions sont bienvenues ! Ouvrez un Issue ou Pull Request.
 
 *© 2026 - Prix Vif Scanner - Application complète de scan alimentaire*
 
-*Dernière mise à jour : 15 Novembre 2026 (v1.5.0 — voir Historique des versions)*
+*Dernière mise à jour : 15 Novembre 2026 (v1.5.1 — voir Historique des versions)*
 *Documentation technique : Voir AGENT.MD pour les détails d'implémentation*
 *Règles IA : Voir CLAUDE.md (le README est versionné à chaque étape)*
-*Statut : ✅ Dashboard fiable - Synchronisation temps réel fonctionnelle*
+*Statut : ✅ Dashboard complet & fonctionnel dès le premier lancement*

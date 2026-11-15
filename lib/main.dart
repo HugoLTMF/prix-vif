@@ -91,17 +91,20 @@ class _MainScreenState extends State<MainScreen> {
       final savedSessions = await _repository.getAllScans();
       print('DEBUG MainScreen: savedSessions.length = ${savedSessions.length}');
 
-      setState(() {
-        if (savedSessions.isEmpty) {
-          // Première utilisation : charger les données de démo
-          print('DEBUG MainScreen: Chargement des demoSessions (Hive vide)');
-          _sessions = List<ScanSession>.from(ScanSession.demoSessions);
-        } else {
-          print('DEBUG MainScreen: Chargement de ${savedSessions.length} sessions depuis Hive');
-          _sessions = List<ScanSession>.from(savedSessions);
+      if (savedSessions.isEmpty) {
+        // Première utilisation : initialiser Hive avec les sessions de démo
+        for (final session in ScanSession.demoSessions) {
+          await _repository.saveScan(session);
         }
-        print('DEBUG MainScreen: _sessions.length final = ${_sessions.length}');
-      });
+        final seeded = await _repository.getAllScans();
+        setState(() {
+          _sessions = seeded.isNotEmpty ? seeded : List<ScanSession>.from(ScanSession.demoSessions);
+        });
+      } else {
+        setState(() {
+          _sessions = List<ScanSession>.from(savedSessions);
+        });
+      }
     } catch (e) {
       print('Erreur initialisation repository: $e');
       setState(() {
