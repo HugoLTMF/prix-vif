@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme.dart';
 import '../models.dart';
+import '../utils/product_type_utils.dart';
 import '../widgets/magic_title.dart';
 import 'package:intl/intl.dart';
 
@@ -19,10 +20,6 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Debug: afficher le nombre de sessions
-    print('DEBUG Dashboard: sessions.length = ${sessions.length}');
-    print('DEBUG Dashboard: sessions.isEmpty = ${sessions.isEmpty}');
-    
     // Calculer les statistiques globales
     final stats = _calculateDashboardStats(sessions);
     
@@ -61,6 +58,13 @@ class DashboardScreen extends StatelessWidget {
                   _NutriScoreDistributionSection(
                     sessions: sessions,
                     distribution: stats.nutriScoreDistribution,
+                  ),
+                  const SizedBox(height: 24),
+                  
+                  // Comparaison par type de produit (Open Food Facts)
+                  _ProductTypeComparisonSection(
+                    productTypeStats: stats.productTypeStats,
+                    globalAveragePrice: stats.averagePrice,
                   ),
                   const SizedBox(height: 24),
                   
@@ -105,6 +109,15 @@ class DashboardScreen extends StatelessWidget {
       }
     }
     
+    // Calculer les statistiques par type de produit (catégorie OFF la plus spécifique)
+    final productTypeStats = <String, _ProductTypeStats>{};
+    for (final item in allItems) {
+      final type = productTypeLabel(item.categories);
+      productTypeStats
+          .putIfAbsent(type, () => _ProductTypeStats())
+          .addItem(item.price);
+    }
+    
     // Calculer les statistiques par semaine
     final weeklyStats = _calculateWeeklyStats(sessions);
     
@@ -127,6 +140,7 @@ class DashboardScreen extends StatelessWidget {
       totalAmount: totalAmount,
       averagePrice: avgPrice,
       nutriScoreDistribution: nutriscoreCounts,
+      productTypeStats: productTypeStats,
       weeklyStats: weeklyStats,
       monthlyStats: monthlyStats,
       weeklyTotal: weeklyTotal,
@@ -201,6 +215,7 @@ class _DashboardStats {
   final double totalAmount;
   final double averagePrice;
   final Map<String, int> nutriScoreDistribution;
+  final Map<String, _ProductTypeStats> productTypeStats;
   final Map<String, _PeriodStats> weeklyStats;
   final Map<String, _PeriodStats> monthlyStats;
   final double weeklyTotal;
@@ -212,11 +227,29 @@ class _DashboardStats {
     required this.totalAmount,
     required this.averagePrice,
     required this.nutriScoreDistribution,
+    required this.productTypeStats,
     required this.weeklyStats,
     required this.monthlyStats,
     required this.weeklyTotal,
     required this.monthlyTotal,
   });
+}
+
+/// Statistiques agrégées pour un type de produit (catégorie OFF)
+class _ProductTypeStats {
+  int itemCount = 0;
+  double totalAmount = 0.0;
+  double minPrice = double.infinity;
+  double maxPrice = 0.0;
+
+  void addItem(double price) {
+    itemCount += 1;
+    totalAmount += price;
+    if (price < minPrice) minPrice = price;
+    if (price > maxPrice) maxPrice = price;
+  }
+
+  double get averagePrice => itemCount > 0 ? totalAmount / itemCount : 0.0;
 }
 
 /// Statistiques pour une période
@@ -554,6 +587,196 @@ class _NutriScoreBar extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: color,
                   borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ==================== COMPARAISON PAR TYPE DE PRODUIT ====================
+
+class _ProductTypeComparisonSection extends StatelessWidget {
+  static const int _maxVisibleTypes = 8;
+
+  final Map<String, _ProductTypeStats> productTypeStats;
+  final double globalAveragePrice;
+
+  const _ProductTypeComparisonSection({
+    required this.productTypeStats,
+    required this.globalAveragePrice,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    // Séparer les vrais types OFF des articles non catégorisés
+    final uncategorized = productTypeStats[uncategorizedTypeLabel];
+    final categorizedEntries = productTypeStats.entries
+        .where((e) => e.key != uncategorizedTypeLabel)
+        .toList()
+      ..sort((a, b) => b.value.totalAmount.compareTo(a.value.totalAmount));
+
+    if (categorizedEntries.isEmpty && uncategorized == null) {
+      return const SizedBox.shrink();
+    }
+
+    final visibleEntries = categorizedEntries.take(_maxVisibleTypes).toList();
+    final hiddenCount = categorizedEntries.length - visibleEntries.length;
+    final maxAverage = visibleEntries.isEmpty
+        ? 0.0
+        : visibleEntries
+            .map((e) => e.value.averagePrice)
+            .reduce((a, b) => a > b ? a : b);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Comparaison par type de produit',
+          style: theme.textTheme.titleMedium?.copyWith(
+            color: AppTheme.textPrimary,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Prix moyen par type (catégories Open Food Facts)',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: AppTheme.textMuted,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          decoration: AppTheme.glassmorphism(),
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              ...visibleEntries.map((entry) {
+                final stats = entry.value;
+                final ratio = maxAverage > 0
+                    ? (stats.averagePrice / maxAverage).clamp(0.0, 1.0)
+                    : 0.0;
+                // Un type plus cher que la moyenne globale est mis en évidence
+                final color = stats.averagePrice >= globalAveragePrice
+                    ? AppTheme.warning
+                    : AppTheme.primary;
+                return _ProductTypeBar(
+                  type: entry.key,
+                  stats: stats,
+                  ratio: ratio.toDouble(),
+                  color: color,
+                );
+              }),
+              if (hiddenCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    '+ $hiddenCount autres types',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textMuted,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              if (uncategorized != null && uncategorized.itemCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    '${uncategorized.itemCount} article${uncategorized.itemCount > 1 ? 's' : ''} non catégorisé${uncategorized.itemCount > 1 ? 's' : ''}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: AppTheme.textMuted,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+                ),
+              if (categorizedEntries.isEmpty && uncategorized != null)
+                Text(
+                  'Aucun type Open Food Facts disponible pour le moment',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Ligne de comparaison pour un type de produit
+class _ProductTypeBar extends StatelessWidget {
+  final String type;
+  final _ProductTypeStats stats;
+  final double ratio;
+  final Color color;
+
+  const _ProductTypeBar({
+    required this.type,
+    required this.stats,
+    required this.ratio,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  type,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: AppTheme.textPrimary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                '${stats.averagePrice.toStringAsFixed(2)} €/article',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${stats.itemCount} article${stats.itemCount > 1 ? 's' : ''} · total ${stats.totalAmount.toStringAsFixed(2)} € · ${stats.minPrice.toStringAsFixed(2)}–${stats.maxPrice.toStringAsFixed(2)} €',
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: AppTheme.textSecondary,
+              fontSize: 11,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Container(
+            height: 20,
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceDark,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Container(
+                width: MediaQuery.of(context).size.width * 0.7 * ratio,
+                decoration: BoxDecoration(
+                  color: color,
+                  borderRadius: BorderRadius.circular(10),
                 ),
               ),
             ),

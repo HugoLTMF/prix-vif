@@ -8,6 +8,13 @@
 
 ## 📋 Historique des versions
 
+### v1.1.0 — 2026-11-15 — Comparaison et filtrage par type de produit (Open Food Facts)
+
+- **Ajouté** : utilitaire `product_type_utils.dart` extrayant le type de produit le plus précis issu de la hiérarchie `categories` Open Food Facts (`Milks`, `Breads`, etc.)
+- **Ajouté** : section « Comparaison par type de produit » dans le tableau de bord avec prix moyen par type, fourchette min/max et barre de ratio comparative
+- **Ajouté** : barre de filtres horizontaux par type de produit (`ChoiceChip`) dans l'écran de sélection de produits avec recherche étendue aux catégories
+- **Ajouté** : suite de tests unitaires et widgets dédiée (`product_type_utils_test.dart`, `product_selection_screen_test.dart`, extension de `dashboard_screen_test.dart`)
+
 ### v1.0.3 — 2026-11-14 — Nettoyage du code mort
 
 - **Supprimé** : 16 méthodes/getters jamais appelés dans `ScanRepository` (`getPriceHistory`, `getStorePriceComparison`, `getStoresForProduct`, `getArticlesByStore/ByBarcode/ByProductName`, `deleteMistralExtractionsForScan`, `getMistralExtraction(s)`, `getPendingOfflineScan`, `clearAllPendingOfflineScans`, `hasProductInCache`, `cachedProductCount`, `articleCount`, `mistralExtractionCount`)
@@ -364,7 +371,7 @@ Les contributions sont bienvenues ! Ouvrez un Issue ou Pull Request.
 
 *© 2026 - Prix Vif Scanner - Application complète de scan alimentaire*
 
-*Dernière mise à jour : 14 Novembre 2026 (v1.0.3 — voir Historique des versions)*
+*Dernière mise à jour : 15 Novembre 2026 (v1.1.0 — voir Historique des versions)*
 *Documentation technique : Voir AGENT.MD pour les détails d'implémentation*
 *Règles IA : Voir CLAUDE.md (le README est versionné à chaque étape)*
 *Statut : ✅ Dashboard fiable - Synchronisation temps réel fonctionnelle*
