@@ -156,6 +156,135 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
     }
   }
 
+  void _showSettingsDialog() {
+    final TextEditingController apiController = TextEditingController(
+      text: MistralService.apiKey ?? '',
+    );
+    bool obscureText = true;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setStateDialog) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceDark,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              title: const Row(
+                children: [
+                  Icon(Icons.settings, color: AppTheme.primary),
+                  SizedBox(width: 10),
+                  Text(
+                    'Configuration API',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Clé API Mistral AI :',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: apiController,
+                    obscureText: obscureText,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: 'Entrez votre clé API Mistral...',
+                      filled: true,
+                      fillColor: AppTheme.surfaceLight,
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          obscureText ? Icons.visibility : Icons.visibility_off,
+                          color: AppTheme.textSecondary,
+                        ),
+                        onPressed: () {
+                          setStateDialog(() {
+                            obscureText = !obscureText;
+                          });
+                        },
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    apiController.text.trim().isEmpty
+                        ? '⚠️ Mode Démo actif (sans clé API). L\'analyse des tickets de caisse utilisera des articles factices.'
+                        : '✅ Clé API configurée. L\'analyse utilisera l\'API Mistral Vision réelle (modèle mistral-small-latest).',
+                    style: TextStyle(
+                      color: apiController.text.trim().isEmpty
+                          ? AppTheme.warning
+                          : AppTheme.accent,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text(
+                    'Annuler',
+                    style: TextStyle(color: AppTheme.textSecondary),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final key = apiController.text.trim();
+                    if (widget.repository != null) {
+                      await widget.repository!.saveMistralApiKey(key);
+                    }
+                    MistralService.apiKey = key.isNotEmpty ? key : null;
+                    if (mounted) {
+                      Navigator.of(dialogContext).pop();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          backgroundColor: AppTheme.primary,
+                          content: Text(
+                            key.isNotEmpty
+                                ? 'Clé API Mistral enregistrée avec succès'
+                                : 'Clé API Mistral supprimée (Mode Démo activé)',
+                            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                          ),
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primary,
+                    foregroundColor: AppTheme.backgroundDark,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                  child: const Text('Sauvegarder'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   // ==================== ÉTAPE 5C — MODE HORS-LIGNE ====================
 
   /// Stocke un scan pour traitement hors-ligne
@@ -355,7 +484,7 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _compressTicketImage() async {
-    if (_ticketImage == null) return;
+    if (_ticketImage == null || _isCompressing) return;
     setState(() {
       _isCompressing = true;
       _errorMessage = null;
@@ -399,7 +528,7 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _processTicketImage() async {
-    if (_compressedImageBytes == null) return;
+    if (_compressedImageBytes == null || _isLoadingProduct) return;
     setState(() {
       _isLoadingProduct = true;
       _errorMessage = null;
@@ -916,17 +1045,71 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildTicketScanZone() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceDark,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.primary.withOpacity(0.1), width: 1.5),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: _ticketImage == null
-          ? _buildTicketPlaceholder()
-          : _buildTicketPreview(),
+    return Stack(
+      children: [
+        Container(
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceDark,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: AppTheme.primary.withOpacity(0.1), width: 1.5),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: _ticketImage == null
+              ? _buildTicketPlaceholder()
+              : _buildTicketPreview(),
+        ),
+        // Bandeau d'erreur (visible aussi en mode ticket, pas seulement en mode code-barres)
+        if (_errorMessage != null)
+          Positioned(
+            top: 28,
+            left: 28,
+            right: 28,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.error.withOpacity(0.95),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _errorMessage!,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        // Loader pendant l'analyse IA du ticket
+        if (_isLoadingProduct)
+          Positioned.fill(
+            child: Container(
+              margin: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.75),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Center(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    CircularProgressIndicator(color: AppTheme.primary, strokeWidth: 3.5),
+                    SizedBox(height: 16),
+                    Text(
+                      'Analyse du ticket par l\'IA...',
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 
@@ -1144,7 +1327,10 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                       child: MagicButton(
                         text: _compressedSize != null ? 'ANALYSER (IA)' : 'OPTIMISER',
                         icon: _compressedSize != null ? Icons.auto_awesome : Icons.bolt,
-                        onPressed: _compressedSize != null ? _processTicketImage : _compressTicketImage,
+                        onPressed: (_isCompressing || _isLoadingProduct)
+                            ? null
+                            : (_compressedSize != null ? _processTicketImage : _compressTicketImage),
+                        isLoading: _isCompressing || _isLoadingProduct,
                         isPrimary: true,
                         height: 48,
                       ),
@@ -1166,6 +1352,11 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
       appBar: AppBar(
         title: const NeonTitle(text: 'SCANNER', fontSize: 22),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings, color: AppTheme.primary),
+            onPressed: _showSettingsDialog,
+            tooltip: 'Paramètres API',
+          ),
           IconButton(
             icon: Badge(
               label: Text(

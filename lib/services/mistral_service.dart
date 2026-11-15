@@ -38,11 +38,15 @@ class MistralExtractionResult {
 
 /// Service d'interaction avec l'API Mistral Vision
 class MistralService {
-  // Clé API Mistral (peut être définie par l'utilisateur ou injectée)
-  static String? apiKey;
-  
-  // Modèle vision recommandé pour Pixtral
-  static const String _model = 'pixtral-12b-2409';
+  // Clé API Mistral : fournie à la compilation via --dart-define=MISTRAL_API_KEY=... (hors dépôt git),
+  // ou saisie dans l'UI (stockée localement dans Hive, utilisée en fallback).
+  static String? apiKey = const String.fromEnvironment('MISTRAL_API_KEY').isNotEmpty
+      ? const String.fromEnvironment('MISTRAL_API_KEY')
+      : null;
+
+  // Modèle vision : Mistral Small 4 (mars 2026), vision native via /v1/chat/completions.
+  // pixtral-12b-2409 est retiré par Mistral depuis le 2025-12-31.
+  static const String _model = 'mistral-small-latest';
   static const String _baseUrl = 'https://api.mistral.ai/v1/chat/completions';
 
   /// Analyse l'image du ticket (JPEG compressé en bytes) pour en extraire la liste des articles
@@ -73,7 +77,24 @@ class MistralService {
               'content': [
                 {
                   'type': 'text',
-                  'text': 'Extrais les articles de ce ticket de caisse. Réponds UNIQUEMENT avec un JSON valide, sans markdown, sans explication. Format attendu : {"articles": [{"nom": "...", "prix": 0.00, "quantite": 1}]}',
+                  'text': '''Analyse cette image de ticket de caisse et extrais UNIQUEMENT la liste des articles/produits achetés de manière individuelle.
+
+Directives STRICTES :
+1. Extrais SEULEMENT les articles/produits achetés (aliments, boissons, etc.).
+2. Ignore COMPLETEMENT :
+   - Le nom, adresse et métadonnées du magasin.
+   - Les totaux, sous-totaux, nets à payer, cumuls.
+   - La TVA et toutes les lignes de taxes.
+   - Les modes de paiement (CARTE BANCAIRE, ESPECES, detail transaction CB, rendu monnaie).
+   - Les remises globales, bons d'achat, coupons (ex: BON D'ACHAT, REMISE -10%).
+   - Les points de fidélité et messages promotionnels.
+3. Pour chaque article :
+   - "nom" : Nettoie le libellé pour qu'il soit propre et lisible (retire les préfixes type étoiles (*), les codes internes du magasin, les codes-barres écrits).
+   - "prix" : Le prix total payé de la ligne pour cet article (après réductions spécifiques à cet article, le cas échéant), sous forme de nombre décimal (ex: 1.49).
+   - "quantite" : Le nombre d'unités achetées (par défaut 1.0).
+
+Réponds UNIQUEMENT avec un JSON valide sous la forme suivante, sans bloc de code markdown (pas de ```json), sans explications :
+{"articles": [{"nom": "...", "prix": 0.00, "quantite": 1}]}''',
                 },
                 {
                   'type': 'image_url',
@@ -86,14 +107,22 @@ class MistralService {
             'type': 'json_object',
           }
         }),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 60));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> body = jsonDecode(response.body);
         final String content = body['choices']?[0]?['message']?['content'] ?? '';
         
         if (content.isNotEmpty) {
-          final Map<String, dynamic> parsedJson = jsonDecode(content);
+          var cleaned = content.trim();
+          // Retirer d'éventuelles fences markdown ```json ... ``` autour du JSON
+          if (cleaned.startsWith('```')) {
+            cleaned = cleaned
+                .replaceFirst(RegExp(r'^```[a-zA-Z]*\s*'), '')
+                .replaceFirst(RegExp(r'\s*```$'), '')
+                .trim();
+          }
+          final Map<String, dynamic> parsedJson = jsonDecode(cleaned);
           final List<dynamic>? articlesJson = parsedJson['articles'];
           
           // Parsing des articles
